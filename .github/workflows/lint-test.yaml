@@ -14,8 +14,6 @@ jobs:
           node-version: '14.x'
       - name: Install dependencies
         uses: bahmutov/npm-install@HEAD
-      - name: Install peer for testing
-        run: yarn peer
       - name: Run linter
         run: yarn lint
       - name: Run Tests
