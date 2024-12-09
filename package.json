@@ -5,7 +5,7 @@
   "main": "./build/index.js",
   "types": "./build/index.d.ts",
   "module": "./build/index.es.js",
-  "author": "Folhomee <contact@folhomee.fr>",
+  "author": "Vituli <vituli@expander.com>",
   "license": "Apache-2.0",
   "keywords": [
     "mongoose",
@@ -16,10 +16,10 @@
     "changed"
   ],
   "bugs": {
-    "url": "https://github.com/FOLHOMEE/mongoose-tracker/issues",
-    "email": "contact@folhomee.fr"
+    "url": "https://github.com/expandertech/mongoose-tracker/issues",
+    "email": "vituli@expander.com"
   },
-  "repository": "https://github.com/FOLHOMEE/mongoose-tracker",
+  "repository": "https://github.com/expandertech/mongoose-tracker",
   "files": [
     "build"
   ],

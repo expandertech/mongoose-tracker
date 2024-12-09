@@ -6,7 +6,6 @@ module.exports = {
   extends: [
     'standard-with-typescript'
   ],
-  files: ['**/*.test.ts', '**/*.test.tsx'], // כלול קבצי בדיקה
   parserOptions: {
     project: './tsconfig.json',
     ecmaFeatures: {

@@ -1,11 +1,11 @@
-import mongoose from "mongoose"
+import mongoose from 'mongoose'
 
 export interface Options {
   name?: string
   limit?: number
   fieldsToTrack?: string[]
   fieldsNotToTrack?: string[]
-  instnaceMongoose? : typeof mongoose;
+  instnaceMongoose?: typeof mongoose
 }
 
 export interface Change {
