@@ -1,879 +1,1305 @@
-import mongoose from 'mongoose'
-import { faker } from '@faker-js/faker'
-import { Schema } from 'mongoose'
-import { MongoMemoryServer } from 'mongodb-memory-server'
-import { times, range, nth } from 'lodash'
+import mongoose, { Types } from "mongoose";
+import mongooseTracker from "../src/index";
+import { faker } from "@faker-js/faker";
+import { Schema } from "mongoose";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import { range, nth } from "lodash";
+import { Collections } from "./enums/collection";
 
-
-import mongooseTracker from '../src/index'
-
-describe('mongooseTracker tests', () => {
+describe("mongooseTracker tests", () => {
   beforeAll(async () => {
-    const mongod = new MongoMemoryServer()
+    const mongod = new MongoMemoryServer();
 
-    await mongod.start()
+    await mongod.start();
 
-    const mongoUrl = await mongod.getUri()
+    const mongoUrl = await mongod.getUri();
 
-    await mongoose.connect(mongoUrl)
-  })
+    await mongoose.connect("mongodb://localhost:27017/testdb");
+  });
 
   beforeEach(async () => {
-    const collections = mongoose.connection.collections
-
-    for (const key in collections) {
-      const collection = collections[key]
-
-      await collection.deleteMany({})
-    }
-  })
+    await mongoose.connection.dropDatabase();
+  });
 
   afterAll(async () => {
-    await mongoose.disconnect()
-  })
+    await mongoose.disconnect();
+  });
 
-  describe('tracker array key name options', () => {
-    it('should create Array in model with the key name "__updates" by default', () => {
+  describe("tracker array key name options", () => {
+    it('should create Array in model with the key name "history" by default', () => {
       const schema = new Schema({
-        name: String
-      })
+        name: String,
+      });
 
-      schema.plugin(mongooseTracker, {})
+      schema.plugin(mongooseTracker, {});
 
-      const Model = mongoose.model(faker.internet.password(), schema)
+      const Model = mongoose.model(faker.internet.password(), schema);
 
-      const doc = new Model({})
-
-
-      expect(doc).toEqual(expect.objectContaining({
-        '__updates': expect.any(Array)
-      }))
-    })
-
-    it('should create Array in model with the key name "__tokens"', () => {
-      const schema = new Schema({})
-
-      schema.plugin(mongooseTracker, {
-        name: '__tokens'
-      })
-
-      const Model = mongoose.model(faker.internet.password(), schema)
-
-      const doc = new Model({})
+      const doc = new Model({});
 
       expect(doc).toEqual(
         expect.objectContaining({
-          '__tokens': expect.any(Array)
+          history: expect.any(Array),
         })
-      )
-    })
-  })
+      );
+    });
 
-  describe('pre functions', () => {
-    describe('save function', () => {
-      it('should not add modified field in __updates if the field is not tracked', async () => {
-        const schema = new Schema({
-          price: Number
+    it('should create Array in model with the key name "__tokens"', () => {
+      const schema = new Schema({});
+
+      schema.plugin(mongooseTracker, {
+        name: "__tokens",
+      });
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = new Model({});
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          __tokens: expect.any(Array),
         })
+      );
+    });
+  });
+
+  describe("pre functions", () => {
+    describe("save function", () => {
+      it("should not add modified field in history if the field is not tracked", async () => {
+        const schema = new Schema({
+          price: Number,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name']
-        })
+          fieldsToTrack: ["name"],
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
         const doc = new Model({
-          price: 0
-        })
+          price: 0,
+        });
 
-        doc.price = 1
+        (doc as any).__changedBy = "test";
 
-        await doc.save()
+        doc.price = 1;
 
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__updates': []
-          })
-        )
-      })
-
-      it('should add 2 modified fields in __updates if 2 fields are tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        const doc = new Model({})
-
-        doc.toto = 'c est mon nom'
-        doc.name = 'tata'
-        doc.price = 5
-
-        await doc.save()
+        await doc.save();
 
         expect(doc).toEqual(
           expect.objectContaining({
-            '__updates': expect.arrayContaining([
+            history: expect.not.arrayContaining([
               expect.objectContaining({
-                changedTo: 'c est mon nom',
-                field: 'toto'
-              }), expect.objectContaining({
-                changedTo: 'tata',
-                field: 'name'
-              })
-            ])
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "price",
+                    before: 0,
+                    after: 1,
+                  }),
+                ]),
+              }),
+            ]),
           })
-        )
-      })
-    })
+        );
+      });
 
-    describe('findOneAndUpdate function', () => {
-      it('should do nothing if object does not exist', async () => {
+      it("should add 2 modified fields in history if 2 fields are tracked", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
+          fieldsToTrack: ["name", "toto"],
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.findByIdAndUpdate(new mongoose.Types.ObjectId(), { name: 'nouveauNom' })
+        const doc = await Model.create({
+          toto: "c ett",
+          price: 10,
+          name: "nom",
+        });
 
-        const doc = await Model.findOne({ price: 10 })
+        doc.toto = "c est mon nom";
+        doc.name = "tata";
+        doc.price = 5;
+
+        await doc.save();
+
+        expect(doc).toEqual(
+          expect.objectContaining({
+            history: expect.arrayContaining([
+              expect.objectContaining({
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "name",
+                    before: "nom",
+                    after: "tata",
+                  }),
+                  expect.objectContaining({
+                    field: "toto",
+                    before: "c ett",
+                    after: "c est mon nom",
+                  }),
+                ]),
+              }),
+            ]),
+          })
+        );
+      });
+
+      it("should add modified field in history if the field is tracked and the action should be `created`", async () => {
+        const PurchaseDemandSchema = new Schema(
+          {
+            brandId: { type: String, required: true },
+            marketplaceId: { type: String, required: true },
+            pdNumber: { type: String, required: true, unique: true },
+            active: { type: Boolean, required: true, default: true },
+            status: { type: String, required: true },
+            createdBy: { type: String, required: true },
+            approvers: [
+              {
+                userId: { type: String, required: true },
+                isApproved: { type: Boolean, required: true, default: false },
+                timestamp: { type: Date, default: null }, // Date when the approver approved/rejected the PD
+              },
+            ],
+            products: [
+              {
+                instanceId: { type: String, required: true },
+                supplierId: { type: String, required: true },
+                quantity: { type: Number, required: true },
+                poRef: { type: String, default: null },
+              },
+            ],
+          },
+          { timestamps: { createdAt: true, updatedAt: true } }
+        );
+
+        PurchaseDemandSchema.plugin(mongooseTracker, {
+          fieldsToTrack: [
+            "active",
+            "status",
+            "products.$.instanceId",
+            "products.$.supplierId",
+          ],
+        });
+
+        const PurchaseDemandModel = mongoose.model(
+          faker.internet.password(),
+          PurchaseDemandSchema
+        );
+
+        await PurchaseDemandModel.create({
+          brandId: "brand1",
+          marketplaceId: "makretplace1",
+          pdNumber: faker.internet.password(),
+          active: true,
+          status: "draft",
+          createdBy: "createdBy1",
+          approvers: [
+            {
+              userId: "userid1",
+              isApproved: false,
+            },
+          ],
+          products: [
+            {
+              instanceId: "instance1",
+              supplierId: "supplier1",
+              quantity: 10,
+            },
+          ],
+        });
+
+        const pd = await PurchaseDemandModel.findOne({ status: "draft" });
+
+        expect(pd).toEqual(
+          expect.objectContaining({
+            history: expect.arrayContaining([]),
+          })
+        );
+
+        pd!.status = "submitted";
+        pd!.active = false;
+        pd!.products[0].instanceId = "instance2";
+
+        // await PurchaseDemandModel.findOneAndUpdate(
+        //   { status: "draft" },
+        //   {
+        //     status: "submitted",
+        //     active: false,
+        //     "products.0.instanceId": "instance2",
+        //   }
+        // );
+
+        await pd!.save();
+
+        const pd2 = await PurchaseDemandModel.findOne({ status: "submitted" });
+
+        expect(pd2).toEqual(
+          expect.objectContaining({
+            history: expect.arrayContaining([
+              expect.objectContaining({
+                action: "updated",
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "status",
+                    before: "draft",
+                    after: "submitted",
+                  }),
+                  expect.objectContaining({
+                    field: "active",
+                    before: true,
+                    after: false,
+                  }),
+                  expect.objectContaining({
+                    field: "products.0.instanceId",
+                    before: "instance1",
+                    after: "instance2",
+                  }),
+                ]),
+              }),
+            ]),
+          })
+        );
+      });
+
+      it("should add modified field in history if the field is tracked", async () => {
+        const purchaseDemandSchema = new Schema({
+          products: [
+            {
+              instanceId: {
+                type: Schema.Types.ObjectId,
+                ref: Collections.ProductInstance,
+                required: true,
+              },
+              supplierId: {
+                type: Schema.Types.ObjectId,
+                ref: Collections.BusinessPartner,
+                default: null,
+              },
+              quantity: { type: Number, required: true },
+            },
+          ],
+          pdNumber: { type: String, required: true, unique: true },
+          active: { type: Boolean, required: true, default: true },
+          status: { type: String, required: true },
+        });
+
+        purchaseDemandSchema.plugin(mongooseTracker, {
+          fieldsToTrack: [
+            "status",
+            "products.$.quantity",
+            "products.$.instanceId",
+            "products.$.supplierId",
+          ],
+          
+        });
+
+        const instnaceProductSchema = new Schema({
+          name: { type: String, required: true },
+        });
+
+        const BusinessPartnerSchema = new Schema({
+          name: { type: String, required: true },
+        });
+
+        const instanceModel = mongoose.model(
+          Collections.ProductInstance,
+          instnaceProductSchema
+        );
+        const BusinessPartnerModel = mongoose.model(
+          Collections.BusinessPartner,
+          BusinessPartnerSchema
+        );
+
+        const purchaseDemandModel = mongoose.model(
+          Collections.PurchaseDemands,
+          purchaseDemandSchema
+        );
+
+        const instance1 = await instanceModel.create({ name: "instance1" });
+        const instance2 = await instanceModel.create({ name: "instance2" });
+        const instance3 = await instanceModel.create({ name: "instance3" });
+
+        const supplier = await BusinessPartnerModel.create({
+          name: "supplier1",
+        });
+
+        const supplier2 = await BusinessPartnerModel.create({
+          name: "supplier2",
+        });
+
+        await purchaseDemandModel.create({
+          pdNumber: "PD0001444",
+          active: true,
+          status: "new",
+          products: [
+            {
+              instanceId: instance1._id,
+              supplierId: null,
+              quantity: 504,
+            },
+            {
+              instanceId: instance2._id,
+              supplierId: null,
+              quantity: 500,
+            },
+            {
+              instanceId: instance3._id,
+              supplierId: supplier._id,
+              quantity: 1000,
+            },
+          ],
+        });
+
+        const { pId: instanceId, sId: supplierId, userId } =  { pId: instance2._id, sId: supplier._id, userId: "userId1" };
+
+        const quantity = 750
+
+        const pd = await purchaseDemandModel.findOne({ pdNumber: "PD0001444" });
+
+  
+        // Find the product to update in the `products` array
+        const productIndex = pd!.products.findIndex(
+          (product) => product.instanceId.toString() === instanceId.toString()
+        );
+
+        if (productIndex === -1) {
+        }
+
+        // Update the specific fields in the document
+        pd!.products[productIndex]!.quantity = quantity; // Update quantity
+        pd!.products[productIndex]!.supplierId = new Types.ObjectId(
+          supplier2._id
+        ); // Update supplier ID
+        pd!.status = 'waitingForApproval'; // Update status
+
+
+        (pd as any)._changedBy = userId;
+        // Save the updated document
+        await pd!.save();
+
+
+        const pd2 = await purchaseDemandModel.findOne({ pdNumber: "PD0001444" });
+
+        expect(pd2).toEqual(
+          expect.objectContaining({
+            history: expect.arrayContaining([
+              expect.objectContaining({
+                action: "updated",
+                changedBy: userId,
+                changes: expect.arrayContaining([
+                  expect.objectContaining({field: 'status', before: 'new', after: 'waitingForApproval'}),
+                  expect.objectContaining({
+                    field: 'products.1.quantity',
+                    before: 500,
+                    after: 750,
+                  }),
+                  expect.objectContaining({
+                    field: 'products.1.supplierId',
+                    before: null,
+                    after: supplier2.name,
+                  })
+    
+                ])
+              }),
+            ]),
+          })
+        );
+
+      });
+    });
+
+    describe("findOneAndUpdate function", () => {
+      it("should do nothing if object does not exist", async () => {
+        const schema = new Schema({
+          name: String,
+          price: Number,
+          toto: String,
+        });
+
+        schema.plugin(mongooseTracker, {
+          fieldsToTrack: ["name", "toto"],
+        });
+
+        const Model = mongoose.model(faker.internet.password(), schema);
+        await Model.create({ price: 10, name: "nom", toto: "c est moi" });
+
+        await Model.findOneAndUpdate(
+          { toto: "roni" },
+          {
+            name: "nouveauNom",
+          }
+        );
+
+        const doc = await Model.findOne({ price: 10 });
 
         expect(doc).not.toEqual(
           expect.objectContaining({
-            '__updates': expect.arrayContaining([
+            history: expect.arrayContaining([
               expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "name",
+                    before: "nom",
+                    after: "nouveauNom",
+                  }),
+                ]),
+              }),
+            ]),
           })
-        )
-      })
+        );
+      });
 
-      it('should add modified field in __updates if the field is tracked', async () => {
+      it("should add modified field in history if the field is tracked", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          pdNumber: String,
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
+          fieldsToTrack: ["name", "toto"],
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.findOneAndUpdate({ price: 10 }, { name: 'nouveauNom' })
+        await Model.create({
+          price: 10,
+          name: "nom",
+          toto: "c est moi",
+          pdNumber: "PD321333",
+        });
+        await Model.findOneAndUpdate(
+          { pdNumber: "PD321333" },
+          { name: "nouveauNom" }
+        );
 
-        const doc = await Model.findOne({ price: 10 })
+        const doc = await Model.findOne({ pdNumber: "PD321333" });
 
         expect(doc).toEqual(
           expect.objectContaining({
-            '__updates': expect.arrayContaining([
+            history: expect.arrayContaining([
               expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
+                action: "updated",
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "name",
+                    before: "nom",
+                    after: "nouveauNom",
+                  }),
+                ]),
+              }),
+            ]),
           })
-        )
-      })
+        );
 
-      it('should not add modified field in __updates if the field is not tracked when increment', async () => {
+        expect(doc?.price).toEqual(10);
+      });
+
+      it("should not add modified field in history if the field is not tracked when increment", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name']
-        })
+          fieldsToTrack: ["name"],
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        const item = await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
+        const item = await Model.create({
+          price: 10,
+          name: "nom",
+          toto: "c est moi",
+        });
 
-        await Model.findOneAndUpdate({ _id: item._id }, { $inc: { price: 1 } })
+        await Model.findOneAndUpdate({ _id: item._id }, { $inc: { price: 1 } });
 
-        const updated = await Model.findById(item._id)
+        const updated = await Model.findById(item._id);
 
-        expect(updated.price).toEqual(item.price + 1)
-      })
+        expect(updated).toEqual(
+          expect.objectContaining({
+            history: expect.not.arrayContaining([
+              expect.objectContaining({
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "price",
+                    before: item.price,
+                    after: item.price! + 1,
+                  }),
+                ]),
+              }),
+            ]),
+          })
+        );
 
-      it('should not add modified field in __updates if the field is not tracked', async () => {
+        expect(updated!.price).toEqual(item.price! + 1);
+      });
+
+      it("should not add modified field in history if the field is not tracked", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto']
-        })
+          fieldsToTrack: ["toto"],
+          name: "history",
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.findOneAndUpdate({ price: 10 }, { name: 'nouveauNom' })
+        await Model.create({ price: 10, name: "nom", toto: "c est moi" });
+        await Model.findOneAndUpdate(
+          { price: 10 },
+          { name: "nouveauNom", toto: "c es mi" }
+        );
 
-        const doc = await Model.findOne({ price: 10 })
+        const doc = await Model.findOne({ price: 10 });
 
         expect(doc).toEqual(
           expect.objectContaining({
-            '__updates': expect.arrayContaining([
+            history: expect.arrayContaining([
               expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
+                action: "updated",
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "name",
+                    before: "nom",
+                    after: "nouveauNom",
+                  }),
+                ]),
+              }),
+            ]),
           })
-        )
-      })
+        );
+      });
 
-      it('should add modified field in __tokens if the field is tracked', async () => {
+      it("should add modified field in __tokens if the field is tracked", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto'],
-          name: '__tokens'
-        })
+          fieldsToTrack: ["name", "toto"],
+          name: "__tokens",
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.findOneAndUpdate({ price: 10 }, { name: 'nouveauNom' })
+        await Model.create({ price: 10, name: "nom", toto: "c est moi" });
+        await Model.findOneAndUpdate({ price: 10 }, { name: "nouveauNom" });
 
-        const doc = await Model.findOne({ price: 10 })
+        const doc = await Model.findOne({ price: 10 });
 
         expect(doc).toEqual(
           expect.objectContaining({
-            '__tokens': expect.arrayContaining([
+            __tokens: expect.arrayContaining([
               expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: "name",
+                    before: "nom",
+                    after: "nouveauNom",
+                  }),
+                ]),
+              }),
+            ]),
           })
-        )
-      })
+        );
+      });
 
-      it('should not add modified field in __tokens if the field is not tracked', async () => {
+      it("should not add modified field in __tokens if the field is not tracked", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto'],
-          name: '__tokens'
-        })
+          fieldsToTrack: ["toto"],
+          name: "__tokens",
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.findOneAndUpdate({ price: 10 }, { name: 'nouveauNom' })
+        await Model.create({ price: 10, name: "nom", toto: "c est moi" });
+        await Model.findOneAndUpdate({ price: 10 }, { name: "nouveauNom" });
 
-        const doc = await Model.findOne({ price: 10 })
+        const doc = await Model.findOne({ price: 10 });
 
         expect(doc).toEqual(
           expect.objectContaining({
-            '__tokens': expect.arrayContaining([
-              expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-    })
-
-    describe('UpdateOne function', () => {
-      it('should add modified field in __updates if the field is tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateOne({ price: 10 }, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
+            __tokens: expect.not.arrayContaining([
               expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
+                field: "name",
+                before: "nom",
+                after: "nouveauNom",
+              }),
+            ]),
           })
-        )
-      })
+        );
+      });
+    });
 
-      it('should not modified field in __updates if the field is not tracked', async () => {
+    describe("updateOne function", () => {
+      it("should not add a modified field to history if the field is not tracked", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto']
-        })
+          fieldsToTrack: ["toto"],
+          name: "history",
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateOne({ price: 10 }, { name: 'nouveauNom' })
+        await Model.create({ name: "initial", price: 10, toto: "tracked" });
 
-        const doc = await Model.findOne({ price: 10 })
+        await Model.updateOne(
+          { name: "initial" },
+          { name: "updatedName" },
+          { changedBy: "user2" }
+        );
 
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
-              expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
+        await Model.updateOne(
+          { toto: "tracked" },
+          { toto: "tracked2" },
+          { changedBy: "user2" }
+        );
 
-      it('should add modified field in __tokens if the field is tracked', async () => {
+        const doc = await Model.findOne({ price: 10 });
+
+        expect((doc as any).history).toEqual(
+          expect.arrayContaining([
+            expect.not.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "name",
+                  before: "initial",
+                  after: "updatedName",
+                }),
+              ]),
+            }),
+          ])
+        );
+      });
+    });
+  });
+
+  describe("Limit options", () => {
+    describe("Save Hook", () => {
+      it("should limit by default 30 elements in history", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+          pdNumber: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto'],
-          name: '__tokens'
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateOne({ price: 10 }, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__tokens': expect.arrayContaining([
-              expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-
-      })
-
-      it('should not add modified field in __tokens if the field is not tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto'],
-          name: '__tokens'
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateOne({ price: 10 }, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__tokens': expect.arrayContaining([
-              expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-    })
-
-    describe('findByIdAndUpdate function', () => {
-      it('should add modified field in __updates if the field is tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        const { _id } = await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-
-        await Model.findByIdAndUpdate(_id, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
-              expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-
-      it('should not add modified field in __updates if the field is not tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        const { _id } = await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-
-        await Model.findByIdAndUpdate(_id, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
-              expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-
-      it('should add modified field in __tokens if the field is tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto'],
-          name: '__tokens'
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        const { _id } = await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-
-        await Model.findByIdAndUpdate(_id, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__tokens': expect.arrayContaining([
-              expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-
-      it('should add modified field in __tokens if the field is not tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto'],
-          name: '__tokens'
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        const { _id } = await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-
-        await Model.findByIdAndUpdate(_id, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__tokens': expect.arrayContaining([
-              expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-    })
-
-    describe('updateMany function', () => {
-      it('should add modified field in __updates if the field is tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateMany({ price: 10 }, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
-              expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-
-      it('should not add modified field in __updates if the field is not tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateMany({ price: 10 }, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
-              expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-
-      it('should add modified field in __tokens if the field is tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto'],
-          name: '__tokens'
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateMany({ price: 10 }, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__tokens': expect.arrayContaining([
-              expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-
-      it('should add modified field in __tokens if the field is not tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['toto'],
-          name: '__tokens'
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateMany({ price: 10 }, { name: 'nouveauNom' })
-
-        const doc = await Model.findOne({ price: 10 })
-
-        expect(doc).toEqual(
-          expect.objectContaining({
-            '__tokens': expect.arrayContaining([
-              expect.not.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-
-      it('should update 2 document if these documents have the field is tracked', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.updateMany({ price: 10 }, { name: 'nouveauNom' })
-
-        const docs = await Model.find({ price: 10 })
-
-        expect(docs[0]).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
-              expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-        expect(docs[1]).toEqual(
-          expect.objectContaining({
-            '__updates': expect.arrayContaining([
-              expect.objectContaining({
-                changedTo: 'nouveauNom',
-                field: 'name'
-              })
-            ])
-          })
-        )
-      })
-    })
-  })
-
-  describe('Limit options', () => {
-    describe('Save Hook', () => {
-      it('should limit by default 30 elements in __updates', async () => {
-        const schema = new Schema({
-          name: String,
-          price: Number,
-          toto: String
-        })
-
-        schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name', 'toto']
-        })
-
-        const Model = mongoose.model(faker.internet.password(), schema)
-
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-
+          fieldsToTrack: ["name", "toto"],
+          limit: 30,
+        });
+
+        const Model = mongoose.model(faker.internet.password(), schema);
+
+        await Model.create({
+          price: 10,
+          name: "nom",
+          toto: "c est moi",
+          pdNumber: "PO03433",
+        });
 
         for await (const index of range(15)) {
-          const doc = await Model.findOne({ price: 10 })
-          
-          doc.name = "name :" + index
-          
-          await doc.save()
-          
-          const doc2 = await Model.findOne({ price: 10 })
-          
-          doc2.toto = "toto :" + index
-          
-          await doc2.save()
+          const doc = (await Model.findOne({ pdNumber: "PO03433" })) as any;
+
+          doc.name = "name :" + index;
+
+          await doc.save();
+
+          const doc2 = (await Model.findOne({ pdNumber: "PO03433" })) as any;
+
+          doc2.toto = "toto :" + index;
+
+          await doc2.save();
         }
 
-        const docExpected = await Model.findOne({ price: 10 })
+        const docExpected = (await Model.findOne({ price: 10 })) as any;
 
-        expect(docExpected.__updates).toHaveLength(
-          30
-        )
+        expect(docExpected.history).toHaveLength(30);
 
-        expect(nth(docExpected.__updates, 29)).toEqual(expect.objectContaining({
-          field: 'toto', changedTo: 'toto :14'
-        }))
-      })
+        expect(nth(docExpected.history, 29)).toEqual(
+          expect.objectContaining({
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: "toto",
+                before: "toto :13",
+                after: "toto :14",
+              }),
+            ]),
+          })
+        );
+      });
 
-      it('should limit 50 elements in __updates', async () => {
+      it("should limit 50 elements in history", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+          pdNumber: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name'],
-          limit: 50
-        })
+          fieldsToTrack: ["name"],
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-
+        await Model.create({
+          price: 10,
+          name: "nom",
+          toto: "c est moi",
+          pdNumber: "PD324333",
+        });
 
         for await (const index of range(50)) {
-          const doc = await Model.findOne({ price: 10 })
-          
-          doc.name = "name :" + index
-          
-          await doc.save()
-          
-          const doc2 = await Model.findOne({ price: 10 })
-          
-          doc2.toto = "toto :" + index
-          
-          await doc2.save()
+          const doc = (await Model.findOne({ pdNumber: "PD324333" })) as any;
+
+          doc.name = "name :" + index;
+
+          await doc.save();
+
+          const doc2 = (await Model.findOne({ pdNumber: "PD324333" })) as any;
+
+          doc2.toto = "toto :" + index;
+
+          await doc2.save();
         }
-        
-        const docExpected = await Model.findOne({ price: 10 })
 
-        expect(docExpected.__updates).toHaveLength(
-          50
-        )
+        const docExpected = (await Model.findOne({ price: 10 })) as any;
 
-        expect(nth(docExpected.__updates, 49)).toEqual(expect.objectContaining({
-          field: 'name', changedTo: 'name :49'
-        }))
-      })
-    })
+        expect(docExpected.history).toHaveLength(50);
+      });
+    });
 
-    describe('Updates Hook', () => {
-      it('should limit by default 30 elements in __updates', async () => {
+    describe("Updates Hook", () => {
+      it("should limit by default 30 elements in history", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name']
-        })
+          fieldsToTrack: ["name"],
+          limit: 30,
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.findOneAndUpdate({ price: 10 }, { name: 'nouveauNom' })
-
+        await Model.create({ price: 10, name: "nom", toto: "c est moi" });
+        await Model.findOneAndUpdate({ price: 10 }, { name: "nouveauNom" });
 
         for (const index of range(30)) {
-          await Model.findOneAndUpdate({ price: 10 }, { name: 'toto' })
-          await Model.findOneAndUpdate({ price: 10 }, { name: 'test' })
+          await Model.findOneAndUpdate({ price: 10 }, { name: "toto" });
+          await Model.findOneAndUpdate({ price: 10 }, { name: "test" });
         }
 
-        const doc = await Model.findOne({ price: 10 })
+        const doc = (await Model.findOne({ price: 10 })) as any;
 
-        expect(doc.__updates).toHaveLength(
-          30
-        )
-      })
+        expect((doc as any).history).toHaveLength(30);
+      });
 
-      it('should limit 50 elements in __updates', async () => {
+      it("should limit 50 elements in history", async () => {
         const schema = new Schema({
           name: String,
           price: Number,
-          toto: String
-        })
+          toto: String,
+        });
 
         schema.plugin(mongooseTracker, {
-          fieldsToTrack: ['name'],
-          limit: 50
-        })
+          fieldsToTrack: ["name"],
+        });
 
-        const Model = mongoose.model(faker.internet.password(), schema)
+        const Model = mongoose.model(faker.internet.password(), schema);
 
-        await Model.create({ price: 10, name: 'nom', toto: 'c est moi' })
-        await Model.findOneAndUpdate({ price: 10 }, { name: 'nouveauNom' })
-
+        await Model.create({ price: 10, name: "nom", toto: "c est moi" });
+        await Model.findOneAndUpdate({ price: 10 }, { name: "nouveauNom" });
 
         for (const index of range(50)) {
-          await Model.findOneAndUpdate({ price: 10 }, { name: 'toto' })
-          await Model.findOneAndUpdate({ price: 10 }, { name: 'test' })
+          await Model.findOneAndUpdate({ price: 10 }, { name: "toto" });
+          await Model.findOneAndUpdate({ price: 10 }, { name: "test" });
         }
 
-        const doc = await Model.findOne({ price: 10 })
+        const doc = (await Model.findOne({ price: 10 })) as any;
 
-        expect(doc.__updates).toHaveLength(
-          50
-        )
-      })
-    })
-  })
-})
+        expect((doc as any).history).toHaveLength(50);
+      });
+    });
+  });
+
+  describe("changedBy functionality", () => {
+    it("should set `changedBy` correctly on document creation", async () => {
+      const schema = new Schema({
+        name: String,
+      });
+
+      schema.plugin(mongooseTracker, {});
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = new Model({ name: "initial" });
+
+      (doc as any)._changedBy = "creator";
+
+      await doc.save();
+
+      expect((doc as any).history).toEqual(expect.arrayContaining([]));
+    });
+
+    it("should set `changedBy` correctly on document update", async () => {
+      const schema = new Schema({
+        name: String,
+      });
+
+      schema.plugin(mongooseTracker, {});
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = await Model.create({ name: "initial" });
+
+      (doc as any)._changedBy = "updater";
+      doc.name = "updated";
+
+      await doc.save();
+
+      expect((doc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "updated",
+            changedBy: "updater",
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: "name",
+                before: "initial",
+                after: "updated",
+              }),
+            ]),
+          }),
+        ])
+      );
+    });
+
+    it("should set `changedBy` correctly on `findOneAndUpdate`", async () => {
+      const schema = new Schema({
+        name: String,
+      });
+
+      schema.plugin(mongooseTracker, {});
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = await Model.create({ name: "initial" });
+
+      await Model.findOneAndUpdate(
+        { _id: doc._id },
+        { name: "updatedName" },
+        { changedBy: "batchJob" }
+      );
+
+      const updatedDoc = await Model.findOne({ _id: doc._id });
+
+      expect((updatedDoc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "updated",
+            changedBy: "batchJob",
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: "name",
+                before: "initial",
+                after: "updatedName",
+              }),
+            ]),
+          }),
+        ])
+      );
+    });
+
+    it("should set `changedBy` correctly for multiple updates", async () => {
+      const schema = new Schema({
+        name: String,
+      });
+
+      schema.plugin(mongooseTracker, {});
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = await Model.create({ name: "initial" });
+
+      for (let i = 0; i < 3; i++) {
+        (doc as any)._changedBy = `user${i}`;
+        doc.name = `name${i}`;
+        await doc.save();
+      }
+
+      expect((doc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            changedBy: "user0",
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: "name",
+                before: "initial",
+                after: "name0",
+              }),
+            ]),
+          }),
+          expect.objectContaining({
+            changedBy: "user1",
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: "name",
+                before: "name0",
+                after: "name1",
+              }),
+            ]),
+          }),
+          expect.objectContaining({
+            changedBy: "user2",
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: "name",
+                before: "name1",
+                after: "name2",
+              }),
+            ]),
+          }),
+        ])
+      );
+    });
+
+    it("should set `changedBy` correctly for bulk updates", async () => {
+      const schema = new Schema({
+        name: String,
+      });
+
+      schema.plugin(mongooseTracker, {});
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      await Model.create({ name: "initial" });
+
+      await Model.updateMany(
+        { name: "initial" },
+        { name: "bulkUpdate" },
+        { changedBy: "admin" }
+      );
+
+      const docs = await Model.find({});
+
+      docs.forEach((doc) => {
+        expect((doc as any).history).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              action: "updated",
+              changedBy: "admin",
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "name",
+                  before: "initial",
+                  after: "bulkUpdate",
+                }),
+              ]),
+            }),
+          ])
+        );
+      });
+    });
+
+    it("should handle missing `changedBy` gracefully", async () => {
+      const schema = new Schema({
+        name: String,
+      });
+
+      schema.plugin(mongooseTracker, {});
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = new Model({ name: "initial" });
+
+      await doc.save();
+
+      doc.name = "updated";
+
+      await doc.save();
+
+      expect((doc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "updated",
+            changedBy: null,
+          }),
+        ])
+      );
+    });
+  });
+
+  describe("Mongoose Tracker Plugin - Nested and Array Fields", () => {
+    it("should track changes to nested fields and array fields", async () => {
+      // Define schemas
+      const itemSchema = new Schema({
+        name: String,
+        value: Number,
+      });
+
+      const parentSchema = new Schema({
+        name: String,
+        nested: {
+          child: String,
+        },
+        items: [itemSchema],
+      });
+
+      // Apply the tracker plugin
+      parentSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ["nested.child", "items.$.name"], // Track nested and array fields
+        name: "history",
+      });
+
+      const Parent = mongoose.model("Parent", parentSchema);
+
+      // Create a document
+      const doc = await Parent.create({
+        name: "Parent",
+        nested: { child: "Initial" },
+        items: [{ name: "Item1", value: 10 }],
+      });
+
+      // Update a nested field
+      await Parent.updateOne({ _id: doc._id }, { "nested.child": "Updated" });
+
+      // Update an array field
+      await Parent.updateOne(
+        { _id: doc._id },
+        { "items.0.name": "UpdatedItem" }
+      );
+
+      // Retrieve the updated document
+      const updatedDoc = await Parent.findOne({ _id: doc._id });
+
+      // Assert that the history array contains both changes
+      expect(updatedDoc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "nested.child",
+                  before: "Initial",
+                  after: "Updated",
+                }),
+              ]),
+            }),
+            expect.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "items.0.name",
+                  before: "Item1",
+                  after: "UpdatedItem",
+                }),
+              ]),
+            }),
+          ]),
+        })
+      );
+    });
+
+    it("should track all dynamic fields, including nested and array fields", async () => {
+      const itemSchema = new Schema({
+        name: String,
+        value: Number,
+      });
+
+      const parentSchema = new Schema({
+        name: String,
+        nested: {
+          child: String,
+          child2: String,
+        },
+        items: [itemSchema],
+      });
+
+      parentSchema.plugin(mongooseTracker, {
+        name: "history", // Store tracked changes in the "history" array
+      });
+
+      const Parent = mongoose.model(faker.internet.password(), parentSchema);
+
+      const doc = await Parent.create({
+        name: "Parent",
+        nested: { child: "Initial", child2: "Initial2" },
+        items: [
+          { name: "Item1", value: 10 },
+          { name: "Item2", value: 20 },
+        ],
+      });
+
+      // // Update nested and array fields
+      await Parent.findOneAndUpdate(
+        { _id: doc._id },
+        {
+          "items.0.name": "UpdatedItem1",
+          "nested.child": "Updated",
+          "nested.child2": "Updated2",
+          "items.1.value": 30,
+        }
+      );
+
+      // Retrieve the updated document
+      const updatedDoc = await Parent.findOne({ _id: doc._id });
+
+      // Assertions
+      expect(updatedDoc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "nested.child",
+                  before: "Initial",
+                  after: "Updated",
+                }),
+                expect.objectContaining({
+                  field: "nested.child2",
+                  before: "Initial2",
+                  after: "Updated2",
+                }),
+              ]),
+            }),
+            expect.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "items.0.name",
+                  before: "Item1",
+                  after: "UpdatedItem1",
+                }),
+              ]),
+            }),
+            expect.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "items.1.value",
+                  before: 20,
+                  after: 30,
+                }),
+              ]),
+            }),
+          ]),
+        })
+      );
+    });
+
+    it("should correctly track changes to nested fields", async () => {
+      const schema = new Schema({
+        nested: {
+          child: String,
+          grandChild: { subField: String },
+        },
+      });
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ["nested.child", "nested.grandChild.subField"],
+      });
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = await Model.create({
+        nested: { child: "initial", grandChild: { subField: "initialSub" } },
+      });
+
+      doc!.nested!.child = "updated";
+      doc!.nested!.grandChild!.subField = "updatedSub";
+
+      await doc.save();
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: "nested.child",
+                  before: "initial",
+                  after: "updated",
+                }),
+                expect.objectContaining({
+                  field: "nested.grandChild.subField",
+                  before: "initialSub",
+                  after: "updatedSub",
+                }),
+              ]),
+            }),
+          ]),
+        })
+      );
+    });
+
+    it("should track changes in both nested and array fields simultaneously", async () => {
+      const schema = new Schema({
+        nested: { child: String },
+        items: [{ name: String }],
+      });
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ["nested.child", "items.$.name"],
+      });
+
+      const Model = mongoose.model(faker.internet.password(), schema);
+
+      const doc = await Model.create({
+        nested: { child: "original" },
+        items: [{ name: "item1" }],
+      });
+
+      doc!.nested!.child = "updatedChild";
+      doc.items[0].name = "updatedItem";
+
+      await doc.save();
+
+      expect((doc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: "nested.child",
+                before: "original",
+                after: "updatedChild",
+              }),
+              expect.objectContaining({
+                field: "items.0.name",
+                before: "item1",
+                after: "updatedItem",
+              }),
+            ]),
+          }),
+        ])
+      );
+    });
+  });
+});
