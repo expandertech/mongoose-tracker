@@ -1,6 +1,6 @@
 {
   "name": "@expander/mongoose-tracker",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Is a mongoose plugin that automatically keeps track of when the document has been created, updated and optionally when some fields have been modified",
   "main": "./build/index.js",
   "types": "./build/index.d.ts",
@@ -36,7 +36,7 @@
     "node": ">=14.0.0"
   },
   "peerDependencies": {
-    "mongoose": "^6.1.5"
+    "mongoose": ">=6.1.5 <9.0.0"
   },
   "dependencies": {
     "lodash": "^4.17.21"
