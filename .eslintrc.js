@@ -6,14 +6,7 @@ module.exports = {
   extends: [
     'standard-with-typescript'
   ],
-  parserOptions: {
-    project: './tsconfig.json',
-    ecmaFeatures: {
-      jsx: true
-    },
-    ecmaVersion: 11,
-    sourceType: 'module'
-  },
+
   plugins: [
     'jest'
   ],
