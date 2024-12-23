@@ -33,13 +33,13 @@ Inspired by the [mongoose-trackable](https://www.npmjs.com/package/@folhomee-pub
 Install **mongooseTracker** via npm:
 
 ```bash
-npm install mongoose-tracker
+npm install @expander/mongoose-tracker
 ```
 
 OR
 
 ```
-yarn add mongoose-tracker
+yarn add @expander/mongoose-tracker
 ```
 
 ---
@@ -49,7 +49,7 @@ yarn add mongoose-tracker
 
 ```js
 import mongoose, { Schema } from "mongoose";
-import mongooseTracker from "mongoose-tracker"; // Adjust import based on your actual package name
+import mongooseTracker from "@expander/mongoose-tracker"; // Adjust import based on your actual package name
 
 const YourSchema = new Schema({
   title: String,
@@ -108,7 +108,7 @@ Use as you would any Mongoose plugin :
 
 ```js
 const mongoose = require("mongoose");
-const mongooseTracker = require("@folhomee-public/mongoose-tracker");
+const mongooseTracker = require("@expander/mongoose-tracker");
 
 const { Schema } = mongoose.Schema;
 
