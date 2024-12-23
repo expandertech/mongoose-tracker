@@ -634,7 +634,7 @@ describe('mongooseTracker tests', () => {
                   expect.objectContaining({
                     field: 'price',
                     before: item.price,
-                    after: (item.price ?? 0) + 1
+                    after: Number(item.price ?? 0) + 1
                   })
                 ])
               })
@@ -642,7 +642,7 @@ describe('mongooseTracker tests', () => {
           })
         )
 
-        expect(updated.price).toEqual((item.price ?? 0) + 1)
+        expect(updated.price).toEqual(Number(item.price ?? 0) + 1)
       })
 
       it('should not add modified field in history if the field is not tracked', async () => {
