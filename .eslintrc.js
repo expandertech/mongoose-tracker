@@ -14,18 +14,9 @@ module.exports = {
   },
   plugins: ["jest"],
   rules: {
-    '@typescript-eslint/strict-boolean-expressions': [
-      'error',
-      {
-        allowString: true,
-        allowNumber: true,
-        allowNullableObject: true,
-        allowNullableBoolean: true,
-        allowNullableString: true,
-        allowNullableNumber: true
-      }
-    ]
-  },  
+    "@typescript-eslint/strict-boolean-expressions": "off",
+    "@typescript-eslint/no-unnecessary-type-assertion": "off",
+  },
   settings: {
     react: {
       version: "detect",
