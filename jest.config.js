@@ -3,7 +3,6 @@ module.exports = {
   testEnvironment: 'node',
   moduleFileExtensions: ['ts', 'tsx', 'js'],
   testPathIgnorePatterns: ['node_modules/'],
-  "parserOptions" : "" ,
   transform: {
     '^.+\\.tsx?$': 'ts-jest'
   },

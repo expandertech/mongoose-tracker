@@ -1,6 +1,6 @@
 {
   "name": "@expander/mongoose-tracker",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "Is a mongoose plugin that automatically keeps track of when the document has been created, updated and optionally when some fields have been modified",
   "main": "./build/index.js",
   "types": "./build/index.d.ts",
@@ -27,9 +27,9 @@
     "build": "rollup -c",
     "clean": "rimraf build",
     "peer": "add-no-save --peer-deps",
-    "lint": "eslint --ext .js,.ts,.tsx src",
+    "lint": "eslint --ext .js,.ts,.tsx src test",
     "test": "./node_modules/.bin/jest --forceExit",
-    "lint:fix": "eslint --fix --ext .js,.ts,.tsx src"
+    "lint:fix": "eslint --fix --ext .js,.ts,.tsx src test"
   },
   "engines": {
     "npm": ">=6.4.0",
@@ -50,6 +50,7 @@
     "@rollup/plugin-typescript": "^8.3.0",
     "@types/jest": "^27.4.0",
     "@types/lodash": "^4.14.178",
+    "@types/mongoose": "^5.11.97",
     "@typescript-eslint/eslint-plugin": "^5.9.0",
     "babel-loader": "^8.2.3",
     "eslint": "^8.6.0",
@@ -64,6 +65,7 @@
     "husky": "^7.0.4",
     "jest": "^27.4.7",
     "mongodb-memory-server": "^8.1.0",
+    "mongoose": "^6.1.5",
     "rimraf": "^3.0.2",
     "rollup": "^2.63.0",
     "rollup-plugin-dts": "^4.1.0",

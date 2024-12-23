@@ -1,18 +1,27 @@
-import mongoose, { MongooseDefaultQueryMiddleware, Schema, Types } from 'mongoose'
+import mongoose, { Schema, Types, MongooseQueryMiddleware } from 'mongoose'
 import { get, isNull, takeRight, isEmpty, isObject, isArray, isEqual, isDate } from 'lodash'
 import { Options, History } from './interfaces'
 
-function isValidObjectId (id: any): boolean {
+/**
+ * Check if a given value is a valid ObjectId.
+ *
+ * @param id - The value to verify.
+ * @returns `true` if the value is a valid ObjectId, otherwise `false`.
+ */
+function isObjectIdValid (id: any): boolean {
   if (mongoose.Types.ObjectId.isValid(id)) {
-    if (String(new mongoose.Types.ObjectId(id)) === id.toString()) {
-      return true
-    }
-    return false
+    return String(new mongoose.Types.ObjectId(id)) === id.toString()
   }
   return false
 }
 
-function matchPattern (fieldPath: string, pattern: string): boolean {
+/**
+ * Check if a given field path matches a given pattern.
+ * Example:
+ *    pattern = "field.$.subfield"
+ *    fieldPath = "field.0.subfield"
+ */
+function doesFieldNameMatchPattern (fieldPath: string, pattern: string): boolean {
   // Convert the pattern to a regex
   const regexPattern = pattern.replace(/\$/g, '\\d+') // Replace $ with \d+ (matches any digit)
   const regex = new RegExp(`^${regexPattern}$`) // Add anchors to match the entire string
@@ -20,6 +29,9 @@ function matchPattern (fieldPath: string, pattern: string): boolean {
   return regex.test(fieldPath) // Test if the fieldPath matches the regex
 }
 
+/**
+ * Check if a string can safely be turned into a valid RegExp pattern.
+ */
 const isValidPattern = (pattern: string): boolean => {
   try {
     RegExp(pattern.replace(/\./g, '\\.').replace(/\$/g, '\\$')) // Replace dots and dollars for regex compatibility
@@ -43,6 +55,42 @@ const findArrayDifferences = (oldArray: any[], newArray: any[]): { added: any[],
   return { added, removed }
 }
 
+const getDisplayName = async (doc: any, field: string, mongoose: any): Promise<string> => {
+  const parts = field.split('.')
+  const isArrayPath = parts.some((part) => /^\d+$/.test(part))
+  if (isArrayPath) {
+    const path = `${parts.slice(0, parts.length - 1).join('.')}._display`
+    const docValue = get(doc, path)
+    const displayField = await returnDisplayFromDocumentForField(doc, field, path, docValue, mongoose)
+    return displayField === field ? field : `${displayField} ${parts[parts.length - 1]}`
+  }
+  return field
+}
+
+const returnDisplayFromDocumentForValue = async (doc: any, field: string, value: any, mongoose: any): Promise<string> => {
+  if (isObjectIdValid(value)) {
+    const refModel = doc.schema.path(field)?.options?.ref
+    if (!isNull(refModel)) {
+      console.log('refModel', refModel)
+      const modelDoc = await mongoose.model(refModel).findById(new Types.ObjectId(value as string))
+      return await returnDisplayFromDocumentForValue(modelDoc, '_display', modelDoc.toObject()._display, mongoose)
+    }
+  }
+  return value
+}
+
+const returnDisplayFromDocumentForField = async (doc: any, originalField: string, field: string, value: any, mongoose: any): Promise<string> => {
+  if (isObjectIdValid(value)) {
+    const refModel = doc.schema.path(field)?.options?.ref
+    if (!isNull(refModel)) {
+      console.log('refModel', refModel)
+      const modelDoc = await mongoose.model(refModel).findById(new Types.ObjectId(value as string))
+      return await returnDisplayFromDocumentForValue(modelDoc, '_display', modelDoc.toObject()._display, mongoose)
+    }
+  }
+  return value ?? originalField
+}
+
 const mongooseTracker = function (schema: Schema, options: Options): void {
   const {
     name = 'history',
@@ -62,28 +110,14 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
     [name]: Array
   })
 
-  const returnDisplayFromDocument = async (doc: any, field: string, value: any): Promise<any> => {
-    if (isValidObjectId(value)) {
-      const refModel = doc.schema.path(field)?.options?.ref
-      if (!isNull(refModel)) {
-        console.log('refModel', refModel)
-        const modelDoc = await instanceMongoose.model(refModel).findById(new Types.ObjectId(value as string))
-        return await returnDisplayFromDocument(modelDoc, '_display', modelDoc.toObject()._display)
-      }
-    }
-    return value
-  }
-
-  const trackChanges = async (doc: any, path: string, value: any, history: History): Promise<void> => {
+  const trackChanges = async (doc: any, path: string, value: any, history: History, displayField: string): Promise<void> => {
     if (isObject(value) && !isArray(value) && !isDate(value)) {
-      const isMongooseDoc =
-        typeof (value as any).toObject === 'function' &&
-        (value.constructor?.name === 'model' || value instanceof mongoose.Document)
+      const isMongooseDoc = typeof (value as any).toObject === 'function' && (value.constructor?.name === 'model' || value instanceof mongoose.Document)
       const plainObject = isMongooseDoc ? (value as any).toObject() : value
       await Promise.all(
         Object.entries(plainObject).map(async ([key, subValue]) => {
           if (!fieldsNotToTrack.includes(key)) {
-            await trackChanges(doc, `${path}.${key}`, subValue, history)
+            await trackChanges(doc, `${path}.${key}`, subValue, history, displayField)
           }
         })
       )
@@ -94,17 +128,17 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
       if (removed.length > 0) {
         history.action = 'removed'
         await Promise.all(
-          removed.map(async (element, index) => {
+          removed.map(async (element: any, index) => {
             if (isObject(element) && !isArray(element)) {
-              const display = await returnDisplayFromDocument(doc, `${path}.${index}._display`, (element as any)._display)
+              const valueDisplay = await returnDisplayFromDocumentForValue(doc, `${path}.${index}._display`, (element as any)._display, instanceMongoose)
               history.changes.push({
-                field: path,
-                before: display,
+                field: displayField,
+                before: valueDisplay,
                 after: null
               })
             } else {
               history.changes.push({
-                field: path,
+                field: displayField,
                 before: element,
                 after: null
               })
@@ -116,11 +150,11 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
         await Promise.all(
           added.map(async (element, index) => {
             if (isObject(element) && !isArray(element)) {
-              const display = await returnDisplayFromDocument(doc, `${path}.${index}._display`, (element as any)._display)
+              const valueDisplay = await returnDisplayFromDocumentForValue(doc, `${path}.${index}._display`, (element as any)._display, instanceMongoose)
               history.changes.push({
                 field: path,
                 before: null,
-                after: display
+                after: valueDisplay
               })
             } else {
               history.changes.push({
@@ -136,13 +170,13 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
       // Track primitive values
       if (get(doc, path) !== value) {
         history.changes.push({
-          field: path,
+          field: displayField,
           before: get(doc, path) ?? null,
           after: value ?? null
         })
       } else if (history.action === 'removed') {
         history.changes.push({
-          field: path,
+          field: displayField,
           before: get(doc, path) ?? null,
           after: null
         })
@@ -153,11 +187,7 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
   // Determine if a field should be tracked
   const shouldTrackField = (field: string): boolean => {
     // Check if the field is explicitly excluded
-    if (
-      fieldsNotToTrack.some((notTrackedField) =>
-        field.startsWith(notTrackedField)
-      )
-    ) {
+    if (fieldsNotToTrack.some((notTrackedField) => field.startsWith(notTrackedField))) {
       return false
     }
 
@@ -168,7 +198,7 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
 
     // Check if the field matches any of the tracked fields
     return fieldsToTrack.some((trackedField) =>
-      matchPattern(field, trackedField)
+      doesFieldNameMatchPattern(field, trackedField)
     )
   }
 
@@ -177,45 +207,39 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
     if (this.isNew) {
       return
     }
-
     const changedBy = (this._changedBy as string) ?? null
-    console.log(`changedBy: ${changedBy}`)
-
     const history: History = {
       action: 'updated',
       at: Date.now(),
       changedBy: changedBy,
       changes: []
     }
-    const allHistory = this.get(`${name}`) as History[]
+    const currentHistoryRecords = this.get(name) as History[]
+    const changedFields = this.directModifiedPaths()
 
-    const updatedFields = this.directModifiedPaths()
-
-    console.log('updatedFields', updatedFields)
-
-    const oldDoc = await (this.constructor as any).findById(this.id)
-    if (isNull(oldDoc)) {
+    const docBeforeUpdate = await (this.constructor as any).findById(this.id)
+    if (isNull(docBeforeUpdate)) {
       return
     }
 
-    for (const field of updatedFields) {
-      if (!shouldTrackField(field)) continue
-      const value = get(this, field)
-      if (isValidObjectId(value) || isValidObjectId(get(oldDoc, field))) {
-        const refModel = (this as any).schema.path(field)?.options?.ref
+    for (const fieldPath of changedFields) {
+      if (!shouldTrackField(fieldPath)) continue
+      const newValue = get(this, fieldPath)
+      const displayField = await getDisplayName(this, fieldPath, instanceMongoose)
+      if (isObjectIdValid(newValue) || isObjectIdValid(get(docBeforeUpdate, fieldPath))) {
+        const refModel = (this as any).schema.path(fieldPath)?.options?.ref
         if (!isNull(refModel)) {
-          console.log('refModel', refModel)
-          const modelDoc = await instanceMongoose.model(refModel).findById(new Types.ObjectId(value as string))
-          const oldValue = await instanceMongoose.model(refModel).findById(new Types.ObjectId(get(oldDoc, field)))
+          const modelDoc = await instanceMongoose.model(refModel).findById(new Types.ObjectId(newValue as string))
+          const oldValue = await instanceMongoose.model(refModel).findById(new Types.ObjectId(get(docBeforeUpdate, fieldPath)))
           history.changes.push({
-            field,
-            before: oldValue?.toObject()?._display ?? get(oldDoc, field),
-            after: modelDoc?.toObject()?._display ?? value
+            field: displayField,
+            before: oldValue?.toObject()?._display ?? get(docBeforeUpdate, fieldPath),
+            after: modelDoc?.toObject()?._display ?? newValue
           })
           continue
         }
       } else {
-        await trackChanges(oldDoc, field, value, history)
+        await trackChanges(docBeforeUpdate, fieldPath, newValue, history, displayField)
       }
     }
 
@@ -223,14 +247,14 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
       return
     }
     // Enforce history limit in the pre-save hook
-    const updatedHistory = takeRight([...allHistory, history], limit)
-    this.set(`${name}`, updatedHistory)
+    const updatedHistoryRecords = takeRight([...currentHistoryRecords, history], limit)
+    this.set(`${name}`, updatedHistoryRecords)
 
     next()
   })
 
   // Middleware hooks for query-based updates
-  const hooks: MongooseDefaultQueryMiddleware[] = [
+  const hooks: MongooseQueryMiddleware[] = [
     'findOneAndUpdate',
     'updateOne',
     'updateMany'
@@ -262,26 +286,26 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
     }
 
     // Iterate over updated fields
-    for (const [key, value] of Object.entries(updatedFields)) {
-      if (shouldTrackField(key)) {
-        if (isValidObjectId(value) || isValidObjectId(get(originalDoc, key))) {
-          const refModel = (this as any).schema.path(key)?.options?.ref
+    for (const [path, value] of Object.entries(updatedFields)) {
+      if (shouldTrackField(path)) {
+        if (isObjectIdValid(value) || isObjectIdValid(get(originalDoc, path))) {
+          const refModel = (this as any).schema.path(path)?.options?.ref
           if (!isNull(refModel)) {
             console.log('refModel', refModel)
             const modelDoc = await instanceMongoose.model(refModel).findById(value)
-            const oldValue = await instanceMongoose.model(refModel).findById(get(originalDoc, key))
+            const oldValue = await instanceMongoose.model(refModel).findById(get(originalDoc, path))
             console.log('modelDoc', modelDoc.name)
             console.log('oldValue', oldValue.name)
 
             history.changes.push({
-              field: key,
-              before: oldValue?.name ?? get(originalDoc, key),
+              field: path,
+              before: oldValue?.name ?? get(originalDoc, path),
               after: modelDoc?.name ?? value
             })
             continue
           }
         } else {
-          await trackChanges(originalDoc, key, value, history)
+          await trackChanges(originalDoc, path, value, history, path)
         }
       }
     }

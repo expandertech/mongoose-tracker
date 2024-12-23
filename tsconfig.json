@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "es6",
     "lib": ["esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -17,7 +17,8 @@
     "declarationDir": "types"
   },
   "include": [
-    "src"
+    "src",
+    "test",
   ],
   "exclude": [
     "node_modules",
