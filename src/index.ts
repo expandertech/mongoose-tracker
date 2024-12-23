@@ -67,7 +67,7 @@ const getDisplayName = async (doc: any, field: string, mongoose: any): Promise<s
   return field
 }
 
-const returnDisplayFromDocumentForValue = async (doc: any, field: string, value: any, mongoose: any): Promise<any> => {
+const returnDisplayFromDocumentForValue = async (doc: any, field: string, value: any, mongoose: any): Promise<string> => {
   if (isObjectIdValid(value)) {
     const refModel = doc.schema.path(field)?.options?.ref
     if (!isNull(refModel)) {
@@ -79,7 +79,7 @@ const returnDisplayFromDocumentForValue = async (doc: any, field: string, value:
   return value
 }
 
-const returnDisplayFromDocumentForField = async (doc: any, originalField: string, field: string, value: any, mongoose: any): Promise<any> => {
+const returnDisplayFromDocumentForField = async (doc: any, originalField: string, field: string, value: any, mongoose: any): Promise<string> => {
   if (isObjectIdValid(value)) {
     const refModel = doc.schema.path(field)?.options?.ref
     if (!isNull(refModel)) {
@@ -128,7 +128,7 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
       if (removed.length > 0) {
         history.action = 'removed'
         await Promise.all(
-          removed.map(async (element, index) => {
+          removed.map(async (element: any, index) => {
             if (isObject(element) && !isArray(element)) {
               const valueDisplay = await returnDisplayFromDocumentForValue(doc, `${path}.${index}._display`, (element as any)._display, instanceMongoose)
               history.changes.push({
