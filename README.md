@@ -1,5 +1,7 @@
 # mongooseTracker
 
+Mongoose Tracker is a mongoose plugin that automatically keeps track of when the document has been created & updated. Rewrite from old [mongoose-trackable]('https://www.npmjs.com/package/@folhomee-public/mongoose-tracker').
+
 A **Mongoose** plugin for tracking document history (create/update actions).  
 Tracks field changes, including nested fields, arrays, and references to other documents.
 
@@ -47,7 +49,7 @@ const YourSchema = new Schema({
 // Apply the plugin with options
 YourSchema.plugin(mongooseTracker, {
   name: 'history',
-  fieldsToTrack: ['title', 'someNestedField', 'contacts.$', 'orders.$.items.$'],
+  fieldsToTrack: ['title', 'Object.someNestedField', 'contacts.$.name', 'orders.$.price'],
   fieldsNotToTrack: ['history', '_id', '__v', 'createdAt', 'updatedAt'],
   limit: 50,
   instanceMongoose: mongoose,
@@ -186,4 +188,4 @@ Below is an example of what the `history` array might look like after a few upda
 
 ## Legal
 
-Author: Roni Jack Vituli
+Author: Roni Jack Vituli, License Apache-2.0
