@@ -1,4 +1,4 @@
-import mongoose, { MongooseDefaultQueryMiddleware, Schema, Types } from 'mongoose'
+import mongoose, { Schema, Types, MongooseQueryMiddleware } from 'mongoose'
 import { get, isNull, takeRight, isEmpty, isObject, isArray, isEqual, isDate } from 'lodash'
 import { Options, History } from './interfaces'
 
@@ -254,7 +254,7 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
   })
 
   // Middleware hooks for query-based updates
-  const hooks: MongooseDefaultQueryMiddleware[] = [
+  const hooks: MongooseQueryMiddleware[] = [
     'findOneAndUpdate',
     'updateOne',
     'updateMany'
