@@ -27,9 +27,9 @@
     "build": "rollup -c",
     "clean": "rimraf build",
     "peer": "add-no-save --peer-deps",
-    "lint": "eslint --ext .js,.ts,.tsx src",
+    "lint": "eslint --ext .js,.ts,.tsx src test",
     "test": "./node_modules/.bin/jest --forceExit",
-    "lint:fix": "eslint --fix --ext .js,.ts,.tsx src"
+    "lint:fix": "eslint --fix --ext .js,.ts,.tsx src test"
   },
   "engines": {
     "npm": ">=6.4.0",

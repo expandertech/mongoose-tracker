@@ -207,10 +207,7 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
     if (this.isNew) {
       return
     }
-
     const changedBy = (this._changedBy as string) ?? null
-    console.log(`changedBy: ${changedBy}`)
-
     const history: History = {
       action: 'updated',
       at: Date.now(),
@@ -218,9 +215,7 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
       changes: []
     }
     const currentHistoryRecords = this.get(name) as History[]
-
     const changedFields = this.directModifiedPaths()
-    console.log('changedFields', changedFields)
 
     const docBeforeUpdate = await (this.constructor as any).findById(this.id)
     if (isNull(docBeforeUpdate)) {
@@ -234,7 +229,6 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
       if (isObjectIdValid(newValue) || isObjectIdValid(get(docBeforeUpdate, fieldPath))) {
         const refModel = (this as any).schema.path(fieldPath)?.options?.ref
         if (!isNull(refModel)) {
-          console.log('refModel', refModel)
           const modelDoc = await instanceMongoose.model(refModel).findById(new Types.ObjectId(newValue as string))
           const oldValue = await instanceMongoose.model(refModel).findById(new Types.ObjectId(get(docBeforeUpdate, fieldPath)))
           history.changes.push({
