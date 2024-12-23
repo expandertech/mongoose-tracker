@@ -1,11 +1,11 @@
 # mongooseTracker
 
-Mongoose Tracker is a mongoose plugin that automatically keeps track of when the document has been created & updated. Rewrite from old [mongoose-trackable]('https://www.npmjs.com/package/@folhomee-public/mongoose-tracker').
+**mongooseTracker** is a versatile Mongoose plugin that automatically tracks the creation and updates of your documents. It meticulously logs changes to specified fields, including nested fields, arrays, and references to other documents, providing a comprehensive history of modifications. This plugin enhances data integrity and auditability within your MongoDB collections.
 
-A **Mongoose** plugin for tracking document history (create/update actions).  
-Tracks field changes, including nested fields, arrays, and references to other documents.
+Inspired by the [mongoose-trackable](https://www.npmjs.com/package/@folhomee-public/mongoose-tracker) package, **mongooseTracker** offers improved functionality and customization to seamlessly integrate with your Mongoose schemas.
 
 ## Table of Contents
+
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
@@ -19,6 +19,7 @@ Tracks field changes, including nested fields, arrays, and references to other d
 ---
 
 ## Features
+
 - Tracks changes to fields in your Mongoose documents.
 - Supports nested objects.
 - Supports array elements (detecting added/removed items).
@@ -27,19 +28,28 @@ Tracks field changes, including nested fields, arrays, and references to other d
 - Keeps a configurable maximum length of history entries.
 
 ---
-
 ## Installation
+
+Install **mongooseTracker** via npm:
 
 ```bash
 npm install mongoose-tracker
 ```
 
+OR
+
+```
+yarn add mongoose-tracker
+```
+
 ---
 ## Usage
+
 ### Plugin Configuration
+
 ```js
-import mongoose, { Schema } from 'mongoose';
-import mongooseTracker from 'mongoose-tracker'; // Adjust import based on your actual package name
+import mongoose, { Schema } from "mongoose";
+import mongooseTracker from "mongoose-tracker"; // Adjust import based on your actual package name
 
 const YourSchema = new Schema({
   title: String,
@@ -48,137 +58,233 @@ const YourSchema = new Schema({
 
 // Apply the plugin with options
 YourSchema.plugin(mongooseTracker, {
-  name: 'history',
-  fieldsToTrack: ['title', 'Object.someNestedField', 'contacts.$.name', 'orders.$.price'],
-  fieldsNotToTrack: ['history', '_id', '__v', 'createdAt', 'updatedAt'],
+  name: "history",
+  fieldsToTrack: [
+    "title",
+    "array.$.array2.$.field",
+    "Object.someNestedField",
+    "contacts.$.name",
+    "orders.$.price",
+  ],
+  fieldsNotToTrack: ["history", "_id", "__v", "createdAt", "updatedAt"],
   limit: 50,
-  instanceMongoose: mongoose,
+  instanceMongoose: mongoose, //optional.
 });
 
-export default mongoose.model('YourModel', YourSchema);
+export default mongoose.model("YourModel", YourSchema);
 ```
+
 #### What It Does
-1. Adds a field called history (by default) to your schema, storing the history of changes.
-2. Monitors changes on save and on specific queries (findOneAndUpdate, updateOne, updateMany).
-3. Logs an entry each time changes occur, storing the user/system who made the change (changedBy) if provided.
+
+1. **Adds a History Field**: Adds a field called `history` (by default) to your schema, storing the history of changes.
+
+2. **Monitors Document Changes**: Monitors changes during `save` operations and on specific query-based updates (`findOneAndUpdate`, `updateOne`, `updateMany`).
+
+   > **Note**: Currently, the plugin works best with the `save` method for tracking changes. We are actively working on enhancing support for other update hooks to ensure comprehensive change tracking across all update operations.
+
+3. **Logs Detailed Changes**: Logs an entry each time changes occur, storing the user/system who made the change (`changedBy`) if provided.
+
 
 ### Options
 
-| Option                 | Type      | Default                                                          | Description                                                                                                                      |
-|------------------------|-----------|------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| **`name`**            | `string`  | `'history'`                                                      | The name of the array field in which the history records will be stored.                                                         |
-| **`fieldsToTrack`**   | `string[]`| `[]` (empty)                                                     | A list of field patterns to track. If empty, **all fields** (except those in `fieldsNotToTrack`) are tracked.                    |
-| **`fieldsNotToTrack`**| `string[]`| `['history', '_id', '_v', '__v', 'createdAt', 'updatedAt', 'deletedAt', '_display']` | Fields/paths to **exclude** from tracking.                                                                                       |
-| **`limit`**           | `number`  | `50`                                                             | Maximum number of history entries to keep in the history array.                                                                  |
-| **`instanceMongoose`**| `mongoose`| The default imported `mongoose` instance                         | Override if you have a separate Mongoose instance.                                                                               |
+| Option                 | Type       | Default                                                                              | Description                                                                                                   |
+| ---------------------- | ---------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| **`name`**             | `string`   | `'history'`                                                                          | The name of the array field in which the history records will be stored.                                      |
+| **`fieldsToTrack`**    | `string[]` | `[]` (empty)                                                                         | A list of field patterns to track. If empty, **all fields** (except those in `fieldsNotToTrack`) are tracked. |
+| **`fieldsNotToTrack`** | `string[]` | `['history', '_id', '_v', '__v', 'createdAt', 'updatedAt', 'deletedAt', '_display']` | Fields/paths to **exclude** from tracking.                                                                    |
+| **`limit`**            | `number`   | `50`                                                                                 | Maximum number of history entries to keep in the history array.                                               |
+| **`instanceMongoose`** | `mongoose` | The default imported `mongoose` instance                                             | Override if you have a separate Mongoose instance.                                                            |
 
 #### Field Patterns
 
-- A **dot** (`.`) matches subfields.  
+- A **dot** (`.`) matches subfields.
   - e.g. `user.address.city` tracks changes to the `city` field inside `user.address`.
-- A **dollar** sign (`$`) matches “any array index.”  
+- A **dollar** sign (`$`) matches “any array index.”
   - e.g. `contacts.$.phone` tracks changes to the `phone` field for **any** element in the `contacts` array.
-
 
 ## Usage
 
 Use as you would any Mongoose plugin :
 
 ```js
-const mongoose = require('mongoose')
-const mongooseTracker = require('@folhomee-public/mongoose-tracker')
+const mongoose = require("mongoose");
+const mongooseTracker = require("@folhomee-public/mongoose-tracker");
 
-const { Schema } = mongoose.Schema
+const { Schema } = mongoose.Schema;
 
 const CarsSchema = new Schema({
-    tags: [String],
-    description: String,
-    price: { type: Number, default: 0 },
-})
+  tags: [String],
+  description: String,
+  price: { type: Number, default: 0 },
+});
 
 CarsSchema.plugin(mongooseTracker, {
-    limit: 50,
-    name: 'metaDescriptions',
-    fieldsToTrack: ['price', 'description'],
-})
+  limit: 50,
+  name: "metaDescriptions",
+  fieldsToTrack: ["price", "description"],
+});
 
-module.exports = mongoose.model('Cars', CarsSchema)
+module.exports = mongoose.model("Cars", CarsSchema);
 ```
 
-When create/update is successful, a [**History**](#History) element is pushed to __updates or the named Array
+## Caveats / Notes
 
-### Example Schema Usage
+### Importance of the `_display` Field
 
-```ts
-import mongoose, { Schema, Document } from 'mongoose';
-import mongooseTracker from 'mongoose-tracker'; // Adjust import path
+The `_display` field is crucial for enhancing the readability of history logs. Instead of logging raw field paths with array indices (e.g., `orders.0.items.1.price`), the plugin utilizes the `_display` field from the respective object to present a more meaningful identifier.
 
-interface IUser extends Document {
+#### How It Works
+
+1. **Presence of `_display`:**
+
+   - Ensure that each subdocument (e.g., items within orders) includes a `_display` field.
+   - This field should contain a string value that uniquely identifies the object, such as a name or a readable label.
+
+2. **Concatenation Mechanism:**
+
+   - When a tracked field is updated (e.g., `orders.$.items.$.price`), the plugin retrieves the `_display` value of the corresponding item.
+   - It then concatenates this `_display` value with the changed field name to form a readable string for the history log.
+   - **Example:**
+     - **Raw Field Path:** `orders.0.items.1.price`
+     - **With `_display`:** `"Test Item 2 price"`
+
+3. **Handling ObjectId References:**
+   - If the `_display` field contains an `ObjectId` referencing another document, the plugin will traverse the reference to fetch the `_display` value of the parent document.
+   - This recursive resolution continues until a string value is obtained, ensuring that the history log remains informative.
+
+#### Benefits
+
+- **Clarity:** Provides a clear and concise representation of changes, making it easier to understand what was modified.
+- **Readability:** Avoids confusion that can arise from array indices, especially in documents with multiple nested arrays.
+- **Relevance:** Focuses on meaningful identifiers that are significant within the application's context.
+
+### Tracking Array Fields
+
+When specifying an array field in `fieldsToTrack`, such as `"orders"`, **mongooseTracker** will monitor for any additions or deletions within that array. This means that:
+
+- **Additions**: When a new element is added to the array, the plugin logs this change in the `history` array.
+- **Deletions**: When an existing element is removed from the array, the plugin logs this removal in the `history` array.
+
+
+## Example
+
+Consider the following schema snippet and operations:
+
+```typescript
+interface Item extends Document {
   name: string;
-  email: string;
-  friends: mongoose.Types.ObjectId[];
-  history?: any[]; // 'history' is the default field where changes are stored
+  price: number;
+  _display: string;
 }
 
-const UserSchema = new Schema<IUser>({
-  name: String,
-  email: String,
-  friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+const ItemSchema = new Schema<Item>({
+  name: { type: String, required: true },
+  price: { type: Number, required: true },
+  _display: { type: String, required: true },
 });
 
-// Apply plugin with desired options
-UserSchema.plugin(mongooseTracker, {
-  fieldsToTrack: ['name', 'email', 'friends.$'],
-  // fieldsNotToTrack, limit, etc. can be defined here
+interface Order extends Document {
+  orderNumber: string;
+  date: Date;
+  items: Item[];
+}
+
+const OrderSchema = new Schema<Order>({
+  orderNumber: { type: String, required: true, unique: true },
+  date: { type: Date, required: true, default: Date.now },
+  items: { type: [ItemSchema], required: true },
+  _display: {type: String },
 });
 
-export const User = mongoose.model<IUser>('User', UserSchema);
+interface PurchaseDemand extends Document {
+  pdNumber: string;
+  orders: Order[];
+  history?: any[];
+}
+
+const PurchaseDemandSchema = new Schema<PurchaseDemand>({
+  pdNumber: { type: String, required: true, unique: true },
+  orders: [OrderSchema],
+});
+
+PurchaseDemandSchema.plugin(mongooseTracker, {
+  name: "history",
+  fieldsToTrack: ["orders"],
+  fieldsNotToTrack: ["history", "_id", "__v"],
+  limit: 50,
+  instanceMongoose: mongoose,
+});
+
+const PurchaseDemandModel = mongoose.model<PurchaseDemand>(
+  "PurchaseDemand",
+  PurchaseDemandSchema
+);
+```
+
+### Operations:
+
+Adding an Order:
+
+```js
+const purchaseDemand = await PurchaseDemandModel.create({
+  pdNumber: "PD-TEST-002",
+  orders: [],
+});
+
+// Adding a new order
+purchaseDemand.orders.push({
+  orderNumber: "ORD-TEST-002",
+  date: new Date(),
+  items: [{ name: "Test Item 3", price: 300, _display: "Test Item 3" }],
+  _display: "ORD-TEST-002",
+});
+
+await purchaseDemand.save();
+```
+
+### History Log Entry After Addition:
+
+```js
+{
+  "action": "added",
+  "at": 1734955271622,
+  "changedBy": null,
+  "changes": [
+    {
+      "field": "orders",
+      "before": null,
+      "after": 'ORD-TEST-002' // the name of _display.
+    }
+  ]
+}
 
 ```
 
-## Example History Output
+### Removing an Order:
 
-Below is an example of what the `history` array might look like after a few updates:
+```js
 
-```json
-[
-  {
-    "action": "updated",
-    "at": 1678239645000,
-    "changedBy": "user-xyz",
-    "changes": [
-      {
-        "field": "name",
-        "before": "Old Name",
-        "after": "New Name"
-      },
-      {
-        "field": "friends",
-        "before": ["602c0c6c8cef5b4a40c3a97f"],
-        "after": ["602c0c6c8cef5b4a40c3a97f", "5ebd9ac90a4b642f1c6b7755"]
-      }
-    ]
-  },
-  {
-    "action": "removed",
-    "at": 1678239700000,
-    "changedBy": "system-cronjob",
-    "changes": [
-      {
-        "field": "friends",
-        "before": "602c0c6c8cef5b4a40c3a97f",
-        "after": null
-      }
-    ]
-  }
-]
+purchaseDemand.orders.pop(); // we remove the last element that insert in orders. (ORD-TEST-002)
+await purchaseDemand.save();
+
 ```
+### History Log Entry After Removal:
 
-### Caveats / Notes
-1. Performance: Tracking many fields or very large arrays can be expensive. Use patterns ($) and fieldsToTrack wisely.
-2. Array Comparison: The plugin considers array items by value using lodash.isEqual, which can be expensive for large nested objects.
-3. References: If a field is a reference to another document (ObjectId with a ref), the plugin attempts to store a “display” value if available (_display by default, or name).
-4. History Limit: The plugin enforces a limit on how many history entries are stored (default 50). Older entries are dropped once the limit is exceeded.
+```js
+{
+  "action": "removed",
+  "at": 1734955271622,
+  "changedBy": null,
+  "changes": [
+    {
+      "field": "orders",
+      "before": 'ORD-TEST-002'
+      "after": null
+    }
+  ]
+}
+
+```
 
 ## Contributing
 
@@ -188,4 +294,5 @@ Below is an example of what the `history` array might look like after a few upda
 
 ## Legal
 
-Author: Roni Jack Vituli, License Apache-2.0
+- Author: Roni Jack Vituli
+- License: Apache-2.0
