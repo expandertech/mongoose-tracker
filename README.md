@@ -12,9 +12,11 @@ Inspired by the [mongoose-trackable](https://www.npmjs.com/package/@folhomee-pub
   - [Plugin Configuration](#plugin-configuration)
   - [Options](#options)
   - [Example Schema Usage](#example-schema-usage)
-  - [Tracking Changes from Query Middleware](#tracking-changes-from-query-middleware)
-- [Example History Output](#example-history-output)
-- [Caveats / Notes](#caveats--notes)
+  - [Using _changedBy to Record Changes](#using-_changedby-to-record-changes)
+  - [Importance of the _display Field](#importance-of-the-_display-field)
+  - [Tracking Array Fields](#tracking-array-fields)
+- [Contributing](#contributing)
+- [Legal](#legal)
 
 ---
 
@@ -28,6 +30,7 @@ Inspired by the [mongoose-trackable](https://www.npmjs.com/package/@folhomee-pub
 - Keeps a configurable maximum length of history entries.
 
 ---
+
 ## Installation
 
 Install **mongooseTracker** via npm:
@@ -43,6 +46,7 @@ yarn add @expander/mongoose-tracker
 ```
 
 ---
+
 ## Usage
 
 ### Plugin Configuration
@@ -53,6 +57,19 @@ import mongooseTracker from "@expander/mongoose-tracker"; // Adjust import based
 
 const YourSchema = new Schema({
   title: String,
+  orders: [
+    {
+      orderId: String,
+      timestamp: Date,
+      items: [ { name: String, price:Number, .... }, ],
+      // ...other fields...
+    }
+  ],
+  user: {
+    firstName: String,
+    lastName:String,
+    // ...other fields...
+  }
   // ...other fields...
 });
 
@@ -61,10 +78,11 @@ YourSchema.plugin(mongooseTracker, {
   name: "history",
   fieldsToTrack: [
     "title",
-    "array.$.array2.$.field",
-    "Object.someNestedField",
-    "contacts.$.name",
-    "orders.$.price",
+    "user.firstName",
+    "user.lastName",
+    "orders.$.items.$.price",
+    "orders.$.items.$.name",
+    "orders.$.timestamp",
   ],
   fieldsNotToTrack: ["history", "_id", "__v", "createdAt", "updatedAt"],
   limit: 50,
@@ -82,8 +100,7 @@ export default mongoose.model("YourModel", YourSchema);
 
    > **Note**: Currently, the plugin works best with the `save` method for tracking changes. We are actively working on enhancing support for other update hooks to ensure comprehensive change tracking across all update operations.
 
-3. **Logs Detailed Changes**: Logs an entry each time changes occur, storing the user/system who made the change (`changedBy`) if provided.
-
+3. **Logs Detailed Changes**: Logs an entry each time changes occur, storing the user/system who made the change (`_changedBy`) if provided.
 
 ### Options
 
@@ -127,9 +144,55 @@ CarsSchema.plugin(mongooseTracker, {
 module.exports = mongoose.model("Cars", CarsSchema);
 ```
 
-## Caveats / Notes
+---
 
-### Importance of the `_display` Field
+### Using `_changedBy` to Record Changes
+
+The `_changedBy` field allows tracking who made specific changes to a document.
+<br/> You can set this field directly before updating a document. <br/>
+It's recommended to use a **user ID**, but any string value can be assigned.
+
+#### Example
+
+```js
+async function foo() {
+  // Create a new document
+  const doc = await SomeModel.find({ name: "Initial Name" });
+  doc.name = "New Name";
+  // Set the user or system responsible for the creation
+  doc._changedBy = "creator"; // Replace 'creator' with the user's ID or identifier
+  await doc.save();
+}
+```
+
+#### Resulting History Log
+
+```js
+[
+  {
+    action: "updated",
+    at: 1734955271622,
+    changedBy: "creator",
+    changes: [
+      {
+        field: "name",
+        before: "Initial Name",
+        after: "New Name",
+      },
+    ],
+  },
+];
+```
+
+### Key Notes
+
+- The \_changedBy field is optional but highly recommended for accountability.
+
+- You can dynamically set \_changedBy based on the current user's ID, username, or other unique identifiers.
+
+---
+
+## Importance of the `_display` Field
 
 The `_display` field is crucial for enhancing the readability of history logs. Instead of logging raw field paths with array indices (e.g., `orders.0.items.1.price`), the plugin utilizes the `_display` field from the respective object to present a more meaningful identifier.
 
@@ -158,19 +221,10 @@ The `_display` field is crucial for enhancing the readability of history logs. I
 - **Readability:** Avoids confusion that can arise from array indices, especially in documents with multiple nested arrays.
 - **Relevance:** Focuses on meaningful identifiers that are significant within the application's context.
 
-### Tracking Array Fields
-
-When specifying an array field in `fieldsToTrack`, such as `"orders"`, **mongooseTracker** will monitor for any additions or deletions within that array. This means that:
-
-- **Additions**: When a new element is added to the array, the plugin logs this change in the `history` array.
-- **Deletions**: When an existing element is removed from the array, the plugin logs this removal in the `history` array.
-
-
 ## Example
+- Consider the following schema snippet:
 
-Consider the following schema snippet and operations:
-
-```typescript
+```ts
 interface Item extends Document {
   name: string;
   price: number;
@@ -187,19 +241,19 @@ interface Order extends Document {
   orderNumber: string;
   date: Date;
   items: Item[];
+  _display:string;
 }
 
 const OrderSchema = new Schema<Order>({
   orderNumber: { type: String, required: true, unique: true },
   date: { type: Date, required: true, default: Date.now },
   items: { type: [ItemSchema], required: true },
-  _display: {type: String },
+  _display: { type: String },
 });
 
 interface PurchaseDemand extends Document {
   pdNumber: string;
   orders: Order[];
-  history?: any[];
 }
 
 const PurchaseDemandSchema = new Schema<PurchaseDemand>({
@@ -208,11 +262,7 @@ const PurchaseDemandSchema = new Schema<PurchaseDemand>({
 });
 
 PurchaseDemandSchema.plugin(mongooseTracker, {
-  name: "history",
-  fieldsToTrack: ["orders"],
-  fieldsNotToTrack: ["history", "_id", "__v"],
-  limit: 50,
-  instanceMongoose: mongoose,
+  fieldsToTrack: ["orders.$.date", "orders.$.items.$.price"], //The Fields I want to track.
 });
 
 const PurchaseDemandModel = mongoose.model<PurchaseDemand>(
@@ -221,11 +271,63 @@ const PurchaseDemandModel = mongoose.model<PurchaseDemand>(
 );
 ```
 
-### Operations:
+```js
+const purchaseDemand = new PurchaseDemand({
+  pdNumber: "PD-001",
+  orders: [
+    {
+      orderNumber: "ORD-001",
+      items: [
+        { name: "Test Item 1", price: 100, _display: "Test Item 1" },
+        { name: "Test Item 2", price: 200, _display: "Test Item 2" },
+      ],
+      _display: "Order 1",
+    },
+  ],
+});
 
-Adding an Order:
+
+// Update an item's price
+purchaseDemand._changedBy = 'system';
+purchaseDemand.orders[0].items[1].price = 250;
+await purchaseDemand.save();
+```
+
+
+#### History Log Entry:
+```js
+{
+  "action": "updated",
+  "at": 1734955271622,
+  "changedBy": "system",
+  "changes": [
+    {
+      "field": "Test Item 2 price", // instead of "orders.0.items.1.price" 
+      "before": 200,
+      "after": 250
+    }
+  ]
+}
+```
+---
+
+## Tracking Array Fields
+
+When specifying an array field in fieldsToTrack, such as "orders", **mongooseTracker** will monitor for any additions or deletions within that array. This means that:
+
+- **Additions**: When a new element is added to the array, the plugin logs this change in the history array.
+- **Deletions**: When an existing element is removed from the array, the plugin logs this removal in the history array.
+
+#### Operations:
+Adding an element (Order):
 
 ```js
+
+PurchaseDemandSchema.plugin(mongooseTracker, {
+  fieldsToTrack: ["orders"],
+});
+
+
 const purchaseDemand = await PurchaseDemandModel.create({
   pdNumber: "PD-TEST-002",
   orders: [],
@@ -242,7 +344,7 @@ purchaseDemand.orders.push({
 await purchaseDemand.save();
 ```
 
-### History Log Entry After Addition:
+#### History Log Entry After Addition:
 
 ```js
 {
@@ -259,17 +361,13 @@ await purchaseDemand.save();
 }
 
 ```
-
-### Removing an Order:
+#### Removing an element (Order):
 
 ```js
-
 purchaseDemand.orders.pop(); // we remove the last element that insert in orders. (ORD-TEST-002)
 await purchaseDemand.save();
-
 ```
-### History Log Entry After Removal:
-
+#### History Log Entry After Removal:
 ```js
 {
   "action": "removed",
