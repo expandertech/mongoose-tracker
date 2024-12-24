@@ -3,7 +3,9 @@ module.exports = {
     es2020: true,
     'jest/globals': true
   },
-  extends: ['standard-with-typescript'],
+  extends: [
+    'standard-with-typescript'
+  ],
   parserOptions: {
     project: './tsconfig.json',
     ecmaFeatures: {
@@ -12,31 +14,23 @@ module.exports = {
     ecmaVersion: 11,
     sourceType: 'module'
   },
-  plugins: ['jest'],
+  plugins: [
+    'jest'
+  ],
   rules: {
-    '@typescript-eslint/strict-boolean-expressions': 'off',
-    '@typescript-eslint/no-unnecessary-type-assertion': 'off'
+    '@typescript-eslint/restrict-template-expressions': ['error', { allowAny: true }]
   },
   settings: {
     react: {
       version: 'detect'
     }
   },
-  overrides: [
-    {
-      files: ['**/*.test.ts', '**/*.spec.ts'],
-      env: {
-        jest: true
-      },
-      rules: {
-        'import/no-anonymous-default-export': 'off'
-      }
-    },
-    {
-      files: ['**/*.stories.*'],
-      rules: {
-        'import/no-anonymous-default-export': 'off'
-      }
+  overrides: [{
+    files: [
+      '**/*.stories.*'
+    ],
+    rules: {
+      'import/no-anonymous-default-export': 'off'
     }
-  ]
+  }]
 }

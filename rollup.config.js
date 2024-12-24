@@ -14,11 +14,14 @@ export default [{
   output: [{
     file: packageJson.main,
     format: 'cjs',
-    sourcemap: true
+    sourcemap: true,
+    exports: 'auto', // Explicitly set exports to 'auto'
+    
   }, {
     file: packageJson.module,
     format: 'esm',
     sourcemap: true
+    
   }],
   plugins: [
     json(),
@@ -27,13 +30,14 @@ export default [{
     commonjs(),
     typescript({
       tsconfig: './tsconfig.json',
-      exclude: ['**/*.test.*']
+      exclude: ['**/*.test.*'],
+      
     }),
     terser(),
     filesize()
   ]
 }, {
-  input: 'build/types/index.d.ts',
+  input: './build/index.d.ts',
   output: [{
     file: packageJson.types,
     format: 'esm'
