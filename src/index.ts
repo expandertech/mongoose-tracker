@@ -114,13 +114,26 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
     if (isObject(value) && !isArray(value) && !isDate(value)) {
       const isMongooseDoc = typeof (value as any).toObject === 'function' && (value.constructor?.name === 'model' || value instanceof mongoose.Document)
       const plainObject = isMongooseDoc ? (value as any).toObject() : value
-      await Promise.all(
-        Object.entries(plainObject).map(async ([key, subValue]) => {
-          if (!fieldsNotToTrack.includes(key)) {
-            await trackChanges(doc, `${path}.${key}`, subValue, history, displayField)
-          }
-        })
-      )
+      if ('_display' in plainObject) {
+        const beforeDisplay = get(doc, `${path}._display`) ?? null
+        const afterDisplay = plainObject._display ?? null
+
+        if (beforeDisplay !== afterDisplay) {
+          history.changes.push({
+            field: displayField, // Use the displayField for the whole object
+            before: beforeDisplay,
+            after: afterDisplay
+          })
+        }
+      } else {
+        await Promise.all(
+          Object.entries(plainObject).map(async ([key, subValue]) => {
+            if (!fieldsNotToTrack.includes(key)) {
+              await trackChanges(doc, `${path}.${key}`, subValue, history, `${displayField} ${key}`)
+            }
+          })
+        )
+      }
     } else if (isArray(value)) {
       const oldArray: any[] = get(doc, path) ?? []
       const newArray: any[] = value ?? []

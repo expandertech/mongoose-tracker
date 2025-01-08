@@ -509,6 +509,67 @@ describe('mongooseTracker tests', () => {
           })
         )
       })
+
+      it('should track changes to nested fields from array', async () => {
+        // Define schemas
+        const itemSchema = new Schema({
+          name: String,
+          value: Number,
+          nested: {
+            name: String,
+            action: String,
+            _display: String
+          },
+          _display: String
+        })
+
+        const parentSchema = new Schema({
+          name: String,
+          nested: {
+            child: String
+          },
+          items: [itemSchema]
+        })
+        // Apply the tracker plugin
+        parentSchema.plugin(mongooseTracker, {
+          fieldsToTrack: ['nested.child', 'items.$.name', 'items.$.nested', 'items.$.nested.name'], // Track nested and array fields
+          name: 'history'
+        })
+        const Parent = mongoose.model('Parent', parentSchema)
+
+        // Create a document
+        const doc = await Parent.create({
+          name: 'Parent',
+          nested: { child: 'Initial' },
+          items: [{ name: 'Item1', value: 1, _display: 'Item1', nested: { name: 'nested1', action: 'delete' } }]
+        })
+        doc.items[0].nested = { name: 'nested2', action: 'update' }
+
+        await doc.save()
+        // Retrieve the updated document
+        const updatedDoc = await Parent.findOne({ _id: doc._id })
+        // Assert that the history array contains both changes
+        expect(updatedDoc).toEqual(
+          expect.objectContaining({
+            history: expect.arrayContaining([
+              expect.objectContaining({
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: 'Item1 nested name',
+                    before: 'nested1',
+                    after: 'nested2'
+                  }),
+                  expect.objectContaining({
+                    field: 'Item1 nested action',
+                    before: 'delete',
+                    after: 'update'
+                  })
+                ])
+              })
+            ])
+          })
+        )
+      })
     })
 
     describe('findOneAndUpdate function', () => {
@@ -1165,7 +1226,11 @@ describe('mongooseTracker tests', () => {
       // Define schemas
       const itemSchema = new Schema({
         name: String,
-        value: Number
+        value: Number,
+        nested: {
+          name: String,
+          action: String
+        }
       })
 
       const parentSchema = new Schema({
@@ -1188,7 +1253,7 @@ describe('mongooseTracker tests', () => {
       const doc = await Parent.create({
         name: 'Parent',
         nested: { child: 'Initial' },
-        items: [{ name: 'Item1', value: 10 }]
+        items: [{ name: 'Item1', value: 1, nested: {name:'nested1', action:'delete'} }]
       })
 
       // Update a nested field
