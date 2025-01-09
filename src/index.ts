@@ -117,12 +117,13 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
       if ('_display' in plainObject) {
         const beforeDisplay = get(doc, `${path}._display`) ?? null
         const afterDisplay = plainObject._display ?? null
-
+        const v1 = await returnDisplayFromDocumentForValue(doc, `${path}._display`, beforeDisplay, instanceMongoose)
+        const v2 = await returnDisplayFromDocumentForValue(doc, `${path}._display`, afterDisplay, instanceMongoose)
         if (beforeDisplay !== afterDisplay) {
           history.changes.push({
             field: displayField, // Use the displayField for the whole object
-            before: beforeDisplay,
-            after: afterDisplay
+            before: v1,
+            after: v2
           })
         }
       } else {

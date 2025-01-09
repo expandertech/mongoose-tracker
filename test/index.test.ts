@@ -570,6 +570,246 @@ describe('mongooseTracker tests', () => {
           })
         )
       })
+
+      it('should track changes to nested supplier fields within the products array', async () => {
+        // Define schemas
+        const SupplierSchema = new Schema({
+          name: String,
+          _display: String
+        })
+
+        const ProductSchema = new Schema({
+          name: String,
+          value: Number,
+          supplier: {
+            supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier' },
+            name: String,
+            dimensions: {
+              boxUnitLengthSide: Number,
+              boxUnitHeightSide: Number,
+              boxUnitWidthSide: Number,
+              boxUnitWeight: Number,
+              boxVolumetricWeight: Number,
+              masterCartonLength: Number,
+              masterCartonWidth: Number,
+              masterCartonHeight: Number,
+              masterCartonCbm: Number,
+              masterCartonWeight: Number,
+              unitInMasterCarton: Number
+            },
+            minimumOrderQuantity: Number,
+            cost: Number,
+            _display: { type: Schema.Types.ObjectId, ref: 'Supplier' }
+          },
+          _display: String
+        })
+
+        const ParentSchema = new Schema({
+          name: String,
+          products: [ProductSchema]
+        })
+        // Apply the tracker plugin
+        ParentSchema.plugin(mongooseTracker, {
+          fieldsToTrack: ['products.$.supplier'], // Track nested and array fields
+          name: 'history'
+        })
+
+        const SupplierModel = mongoose.model('Supplier', SupplierSchema)
+        const ProductModel = mongoose.model('Product', ProductSchema)
+        const Parent = mongoose.model('Parent', ParentSchema)
+
+        const supplier1 = await SupplierModel.create({ name: 'Supplier 1', _display: 'Supplier 1' })
+        const supplier2 = await SupplierModel.create({ name: 'Supplier 2', _display: 'Supplier 2' })
+
+        const item1 = await ProductModel.create({
+          name: 'Item 1',
+          value: 1,
+          _display: 'Item 1',
+          supplier: {
+            _display: supplier1._id,
+            supplierId: supplier1._id,
+            name: supplier1.name,
+            dimensions: {
+              boxUnitLengthSide: 10,
+              boxUnitHeightSide: 10,
+              boxUnitWidthSide: 10,
+              boxUnitWeight: 10,
+              boxVolumetricWeight: 10,
+              masterCartonLength: 10,
+              masterCartonWidth: 10,
+              masterCartonHeight: 10,
+              masterCartonCbm: 10,
+              masterCartonWeight: 10,
+              unitInMasterCarton: 10
+            },
+            minimumOrderQuantity: 10,
+            cost: 10
+          }
+        })
+
+        const parent = await Parent.create({
+          products: [item1],
+          name: 'Parent'
+        })
+
+        parent.products[0].supplier = {
+          _display: supplier2._id,
+          supplierId: supplier2._id,
+          name: supplier2.name,
+          dimensions: {
+            boxUnitLengthSide: 20,
+            boxUnitHeightSide: 20,
+            boxUnitWidthSide: 20,
+            boxUnitWeight: 20,
+            boxVolumetricWeight: 20,
+            masterCartonLength: 20,
+            masterCartonWidth: 20,
+            masterCartonHeight: 20,
+            masterCartonCbm: 20,
+            masterCartonWeight: 20,
+            unitInMasterCarton: 20
+          },
+          minimumOrderQuantity: 20,
+          cost: 20
+        }
+
+        await parent.save()
+
+        // Assert that the history array contains both changes
+        expect(parent).toEqual(
+          expect.objectContaining({
+            history: expect.arrayContaining([
+              expect.objectContaining({
+                changes: expect.arrayContaining([
+                  expect.objectContaining({
+                    field: 'Item 1 supplier',
+                    before: 'Supplier 1',
+                    after: 'Supplier 2'
+                  })
+                ])
+              })
+            ])
+          })
+        )
+      })
+
+      // it('should track changes to nested supplier fields within the products array', async () => {
+      //   // Define schemas
+      //   const SupplierSchema = new Schema({
+      //     name: String,
+      //   })
+
+      //   const ProductSchema = new Schema({
+      //     name: String,
+      //     value: Number,
+      //     supplier: {
+      //       supplierId: { type: Schema.Types.ObjectId, ref: 'Supplier' },
+      //       name: String,
+      //       dimensions: {
+      //         boxUnitLengthSide: Number,
+      //         boxUnitHeightSide: Number,
+      //         boxUnitWidthSide: Number,
+      //         boxUnitWeight: Number,
+      //         boxVolumetricWeight: Number,
+      //         masterCartonLength: Number,
+      //         masterCartonWidth: Number,
+      //         masterCartonHeight: Number,
+      //         masterCartonCbm: Number,
+      //         masterCartonWeight: Number,
+      //         unitInMasterCarton: Number
+      //       },
+      //       minimumOrderQuantity: Number,
+      //       cost: Number,
+      //     },
+      //     _display: String
+      //   })
+
+      //   const ParentSchema = new Schema({
+      //     name: String,
+      //     products: [ProductSchema]
+      //   })
+      //   // Apply the tracker plugin
+      //   ParentSchema.plugin(mongooseTracker, {
+      //     fieldsToTrack: ['products.$.supplier'], // Track nested and array fields
+      //     name: 'history'
+      //   })
+
+      //   const SupplierModel = mongoose.model('Supplier', SupplierSchema)
+      //   const ProductModel = mongoose.model('Product', ProductSchema)
+      //   const Parent = mongoose.model('Parent', ParentSchema)
+
+      //   const supplier1 = await SupplierModel.create({ name: 'Supplier 1', _display: 'Supplier 1' })
+      //   const supplier2 = await SupplierModel.create({ name: 'Supplier 2', _display: 'Supplier 2' })
+
+      //   const item1 = await ProductModel.create({
+      //     name: 'Item 1',
+      //     value: 1,
+      //     _display: 'Item 1',
+      //     supplier: {
+      //       supplierId: supplier1._id,
+      //       name: supplier1.name,
+      //       dimensions: {
+      //         boxUnitLengthSide: 10,
+      //         boxUnitHeightSide: 10,
+      //         boxUnitWidthSide: 10,
+      //         boxUnitWeight: 10,
+      //         boxVolumetricWeight: 10,
+      //         masterCartonLength: 10,
+      //         masterCartonWidth: 10,
+      //         masterCartonHeight: 10,
+      //         masterCartonCbm: 10,
+      //         masterCartonWeight: 10,
+      //         unitInMasterCarton: 10
+      //       },
+      //       minimumOrderQuantity: 10,
+      //       cost: 10
+      //     }
+      //   })
+
+      //   const parent = await Parent.create({
+      //     products: [item1],
+      //     name: 'Parent'
+      //   })
+
+      //   parent.products[0].supplier = {
+      //     supplierId: supplier2._id,
+      //     name: supplier2.name,
+      //     dimensions: {
+      //       boxUnitLengthSide: 20,
+      //       boxUnitHeightSide: 20,
+      //       boxUnitWidthSide: 20,
+      //       boxUnitWeight: 20,
+      //       boxVolumetricWeight: 20,
+      //       masterCartonLength: 20,
+      //       masterCartonWidth: 20,
+      //       masterCartonHeight: 20,
+      //       masterCartonCbm: 20,
+      //       masterCartonWeight: 20,
+      //       unitInMasterCarton: 20
+      //     },
+      //     minimumOrderQuantity: 20,
+      //     cost: 20
+      //   }
+
+      //   await parent.save()
+
+      //   // Assert that the history array contains both changes
+      //   expect(parent).toEqual(
+      //     expect.objectContaining({
+      //       history: expect.arrayContaining([
+      //         expect.objectContaining({
+      //           changes: expect.arrayContaining([
+      //             expect.objectContaining({
+      //               field: 'Item 1 supplier',
+      //               before: 'Supplier 1',
+      //               after: 'Supplier 2'
+      //             })
+      //           ])
+      //         })
+      //       ])
+      //     })
+      //   )
+      // })
     })
 
     describe('findOneAndUpdate function', () => {
