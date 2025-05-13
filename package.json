@@ -24,7 +24,7 @@
     "build"
   ],
   "scripts": {
-  "build": "rollup -c",
+    "build": "rollup -c",
     "clean": "rimraf build",
     "peer": "add-no-save --peer-deps",
     "lint": "eslint --ext .js,.ts,.tsx src",
