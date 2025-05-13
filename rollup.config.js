@@ -11,19 +11,15 @@ import packageJson from './package.json'
 
 export default [{
   input: './src/index.ts',
-  output: [
-    {
-      file: packageJson.main,
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'auto'
-    },
-    {
-      file: packageJson.module,
-      format: 'esm',
-      sourcemap: true
-    }
-  ],
+  output: [{
+    file: packageJson.main,
+    format: 'cjs',
+    sourcemap: true
+  }, {
+    file: packageJson.module,
+    format: 'esm',
+    sourcemap: true
+  }],
   plugins: [
     json(),
     peerDepsExternal(),
@@ -37,7 +33,7 @@ export default [{
     filesize()
   ]
 }, {
-  input: './build/index.d.ts',
+  input: 'types/index.d.ts',
   output: [{
     file: packageJson.types,
     format: 'esm'
