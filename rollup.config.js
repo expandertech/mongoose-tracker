@@ -11,18 +11,19 @@ import packageJson from './package.json'
 
 export default [{
   input: './src/index.ts',
-  output: [{
-    file: packageJson.main,
-    format: 'cjs',
-    sourcemap: true,
-    exports: 'auto', // Explicitly set exports to 'auto'
-    
-  }, {
-    file: packageJson.module,
-    format: 'esm',
-    sourcemap: true
-    
-  }],
+  output: [
+    {
+      file: packageJson.main,
+      format: 'cjs',
+      sourcemap: true,
+      exports: 'auto'
+    },
+    {
+      file: packageJson.module,
+      format: 'esm',
+      sourcemap: true
+    }
+  ],
   plugins: [
     json(),
     peerDepsExternal(),
@@ -30,8 +31,7 @@ export default [{
     commonjs(),
     typescript({
       tsconfig: './tsconfig.json',
-      exclude: ['**/*.test.*'],
-      
+      exclude: ['**/*.test.*']
     }),
     terser(),
     filesize()
