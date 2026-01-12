@@ -87,6 +87,7 @@ YourSchema.plugin(mongooseTracker, {
   fieldsNotToTrack: ["history", "_id", "__v", "createdAt", "updatedAt"],
   limit: 50,
   instanceMongoose: mongoose, //optional.
+  logLevel: 'info', // Optional: 'debug' | 'info' | 'warn' | 'error' | 'none' (default: 'none')
 });
 
 export default mongoose.model("YourModel", YourSchema);
@@ -111,6 +112,8 @@ export default mongoose.model("YourModel", YourSchema);
 | **`fieldsNotToTrack`** | `string[]` | `['history', '_id', '_v', '__v', 'createdAt', 'updatedAt', 'deletedAt', '_display']` | Fields/paths to **exclude** from tracking.                                                                    |
 | **`limit`**            | `number`   | `50`                                                                                 | Maximum number of history entries to keep in the history array.                                               |
 | **`instanceMongoose`** | `mongoose` | The default imported `mongoose` instance                                             | Override if you have a separate Mongoose instance.                                                            |
+| **`logLevel`**         | `string`   | `'none'`                                                                            | Logging level: `'debug'`, `'info'`, `'warn'`, `'error'`, or `'none'`.                                        |
+| **`logger`**           | `Logger`   | Default console logger                                                               | Custom logger instance (e.g., Winston, Pino).                                                                 |
 
 #### Field Patterns
 
@@ -310,6 +313,98 @@ await purchaseDemand.save();
 }
 ```
 ---
+
+## Logging
+
+The plugin includes a built-in logging system to help with debugging and monitoring. You can control the verbosity of logs using the `logLevel` option or provide your own custom logger.
+
+### Using Built-in Logging
+
+```js
+YourSchema.plugin(mongooseTracker, {
+  name: "history",
+  fieldsToTrack: ["title", "status"],
+  logLevel: 'info' // Set log level
+});
+```
+
+**Available Log Levels:**
+- `'debug'` - Detailed information for debugging (field changes, array operations, references)
+- `'info'` - General informational messages (hooks triggered, history updates)
+- `'warn'` - Warning messages (missing documents, null references)
+- `'error'` - Error messages (invalid patterns, lookup failures)
+- `'none'` - Disable all logging (default)
+
+### Log Output Examples
+
+```bash
+# Info level
+[mongoose-tracker] [INFO] Initializing mongoose-tracker plugin with options: { ... }
+[mongoose-tracker] [INFO] Pre-save hook triggered for document 507f1f77bcf86cd799439011
+
+# Debug level (includes all info + detailed tracking)
+[mongoose-tracker] [DEBUG] Tracking changes for path: title, displayField: title
+[mongoose-tracker] [DEBUG] Primitive value changed for title: "Old Title" => "New Title"
+[mongoose-tracker] [DEBUG] Array elements added to orders: 2
+
+# Warn level
+[mongoose-tracker] [WARN] Referenced document not found for model: Category, id: 507f1f77bcf86cd799439012
+```
+
+### Using a Custom Logger
+
+You can provide your own logger (e.g., Winston, Pino) by implementing the `Logger` interface:
+
+```js
+import winston from 'winston';
+
+const customLogger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({ filename: 'mongoose-tracker.log' })
+  ]
+});
+
+// Adapt Winston to mongoose-tracker Logger interface
+const loggerAdapter = {
+  debug: (message, ...args) => customLogger.debug(message, args),
+  info: (message, ...args) => customLogger.info(message, args),
+  warn: (message, ...args) => customLogger.warn(message, args),
+  error: (message, ...args) => customLogger.error(message, args)
+};
+
+YourSchema.plugin(mongooseTracker, {
+  name: "history",
+  fieldsToTrack: ["title"],
+  logger: loggerAdapter
+});
+```
+
+### Using Pino
+
+```js
+import pino from 'pino';
+
+const pinoLogger = pino({
+  level: 'debug',
+  transport: {
+    target: 'pino-pretty'
+  }
+});
+
+const loggerAdapter = {
+  debug: (message, ...args) => pinoLogger.debug({ args }, message),
+  info: (message, ...args) => pinoLogger.info({ args }, message),
+  warn: (message, ...args) => pinoLogger.warn({ args }, message),
+  error: (message, ...args) => pinoLogger.error({ args }, message)
+};
+
+YourSchema.plugin(mongooseTracker, {
+  name: "history",
+  logger: loggerAdapter
+});
+```
 
 ## Tracking Array Fields
 

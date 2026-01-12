@@ -2442,5 +2442,707 @@ describe('mongooseTracker tests', () => {
         })
       )
     })
+
+    it('should track multiple items added to array in single save', async () => {
+      const schema = new Schema({
+        name: String,
+        items: [{ name: String, value: Number, _display: String }]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['items']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({ name: 'test', items: [] })
+
+      doc.items.push({ name: 'item1', value: 10, _display: 'Item 1' })
+      doc.items.push({ name: 'item2', value: 20, _display: 'Item 2' })
+      doc.items.push({ name: 'item3', value: 30, _display: 'Item 3' })
+
+      await doc.save()
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'added',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'items',
+                  before: null,
+                  after: 'Item 1'
+                }),
+                expect.objectContaining({
+                  field: 'items',
+                  before: null,
+                  after: 'Item 2'
+                }),
+                expect.objectContaining({
+                  field: 'items',
+                  before: null,
+                  after: 'Item 3'
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
+
+    it('should track multiple items removed from array in single save', async () => {
+      const schema = new Schema({
+        name: String,
+        tags: [String]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['tags']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'test',
+        tags: ['tag1', 'tag2', 'tag3', 'tag4']
+      })
+
+      // Remove multiple items
+      doc.tags = ['tag1', 'tag2']
+
+      await doc.save()
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'removed',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'tags',
+                  before: 'tag3',
+                  after: null
+                }),
+                expect.objectContaining({
+                  field: 'tags',
+                  before: 'tag4',
+                  after: null
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
+
+    it('should track array with objects when items are added and track using _display', async () => {
+      const schema = new Schema({
+        name: String,
+        products: [{
+          sku: String,
+          quantity: Number,
+          _display: String
+        }]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['products']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'Order 1',
+        products: [
+          { sku: 'SKU001', quantity: 5, _display: 'Product A' }
+        ]
+      })
+
+      // Add new products
+      doc.products.push({ sku: 'SKU002', quantity: 10, _display: 'Product B' })
+      doc.products.push({ sku: 'SKU003', quantity: 15, _display: 'Product C' })
+
+      await doc.save()
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'added',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'products',
+                  before: null,
+                  after: 'Product B'
+                }),
+                expect.objectContaining({
+                  field: 'products',
+                  before: null,
+                  after: 'Product C'
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
+
+    it('should track when replacing entire array with new array', async () => {
+      const schema = new Schema({
+        name: String,
+        items: [{ name: String, _display: String }]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['items']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'test',
+        items: [
+          { name: 'original1', _display: 'Original 1' },
+          { name: 'original2', _display: 'Original 2' }
+        ]
+      })
+
+      // Replace entire array
+      doc.items = [
+        { name: 'new1', _display: 'New 1' },
+        { name: 'new2', _display: 'New 2' }
+      ]
+
+      await doc.save()
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'items',
+                  before: 'Original 1',
+                  after: null
+                }),
+                expect.objectContaining({
+                  field: 'items',
+                  before: 'Original 2',
+                  after: null
+                })
+              ])
+            })
+          ])
+        })
+      )
+
+      // Reset history to check for additions
+      doc.items.push({ name: 'another', _display: 'Another Item' })
+      await doc.save()
+
+      expect((doc as any).history.length).toBeGreaterThan(1)
+    })
+
+    it('should handle empty array becoming populated', async () => {
+      const schema = new Schema({
+        name: String,
+        emails: [String]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['emails']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'user',
+        emails: []
+      })
+
+      doc.emails = ['email1@test.com', 'email2@test.com']
+
+      await doc.save()
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'added',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'emails',
+                  before: null,
+                  after: 'email1@test.com'
+                }),
+                expect.objectContaining({
+                  field: 'emails',
+                  before: null,
+                  after: 'email2@test.com'
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
+
+    it('should handle populated array becoming empty', async () => {
+      const schema = new Schema({
+        name: String,
+        tags: [String]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['tags']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'item',
+        tags: ['urgent', 'important', 'review']
+      })
+
+      doc.tags = []
+
+      await doc.save()
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'removed',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'tags',
+                  before: 'urgent',
+                  after: null
+                }),
+                expect.objectContaining({
+                  field: 'tags',
+                  before: 'important',
+                  after: null
+                }),
+                expect.objectContaining({
+                  field: 'tags',
+                  before: 'review',
+                  after: null
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
+
+    it('should track nested arrays - adding and removing items', async () => {
+      const schema = new Schema({
+        name: String,
+        orders: [{
+          orderNumber: String,
+          items: [{ sku: String, _display: String }],
+          _display: String
+        }]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['orders']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'customer',
+        orders: []
+      })
+
+      // Add order with items
+      doc.orders.push({
+        orderNumber: 'ORD001',
+        items: [
+          { sku: 'SKU001', _display: 'Item 1' },
+          { sku: 'SKU002', _display: 'Item 2' }
+        ],
+        _display: 'Order 1'
+      })
+
+      await doc.save()
+
+      expect(doc).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'added',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'orders',
+                  before: null,
+                  after: 'Order 1'
+                })
+              ])
+            })
+          ])
+        })
+      )
+
+      // Now remove the order
+      doc.orders = []
+      await doc.save()
+
+      expect((doc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'removed',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'orders',
+                before: 'Order 1',
+                after: null
+              })
+            ])
+          })
+        ])
+      )
+    })
+  })
+
+  describe('Edge cases for coverage - Referenced documents and null handling', () => {
+    it('should handle referenced document that does not exist (null reference)', async () => {
+      const CategorySchema = new Schema({
+        name: String,
+        _display: String
+      })
+
+      const ProductSchema = new Schema({
+        name: String,
+        categoryId: { type: Schema.Types.ObjectId, ref: 'Category' }
+      })
+
+      ProductSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ['categoryId']
+      })
+
+      const Category = mongoose.model('Category', CategorySchema)
+      const Product = mongoose.model(faker.internet.password(), ProductSchema)
+
+      const product = await Product.create({
+        name: 'Test Product',
+        categoryId: null
+      })
+
+      // Try to update to non-existent category
+      const nonExistentId = new Types.ObjectId()
+      product.categoryId = nonExistentId
+
+      await product.save()
+
+      // Should still track the change even if reference doesn't exist
+      expect((product as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'updated',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'categoryId'
+              })
+            ])
+          })
+        ])
+      )
+    })
+
+    it('should handle updating ObjectId reference via findOneAndUpdate', async () => {
+      const SupplierSchema = new Schema({
+        name: String,
+        _display: String
+      })
+
+      const ItemSchema = new Schema({
+        name: String,
+        supplierId: { type: Schema.Types.ObjectId, ref: 'SupplierTest' }
+      })
+
+      ItemSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ['supplierId']
+      })
+
+      const Supplier = mongoose.model('SupplierTest', SupplierSchema)
+      const Item = mongoose.model(faker.internet.password(), ItemSchema)
+
+      const supplier1 = await Supplier.create({
+        name: 'Supplier 1',
+        _display: 'Supplier One'
+      })
+
+      const supplier2 = await Supplier.create({
+        name: 'Supplier 2',
+        _display: 'Supplier Two'
+      })
+
+      const item = await Item.create({
+        name: 'Test Item',
+        supplierId: supplier1._id
+      })
+
+      // Update via findOneAndUpdate
+      await Item.findOneAndUpdate(
+        { _id: item._id },
+        { supplierId: supplier2._id },
+        { changedBy: 'admin' }
+      )
+
+      const updatedItem = await Item.findById(item._id)
+
+      expect((updatedItem as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'updated',
+            changedBy: 'admin',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'supplierId',
+                before: 'Supplier One',
+                after: 'Supplier Two'
+              })
+            ])
+          })
+        ])
+      )
+    })
+
+    it('should handle _display field change in nested object', async () => {
+      const ProductSchema = new Schema({
+        name: String,
+        supplier: {
+          name: String,
+          code: String,
+          _display: String
+        }
+      })
+
+      ProductSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ['supplier']
+      })
+
+      const Product = mongoose.model(faker.internet.password(), ProductSchema)
+
+      const product = await Product.create({
+        name: 'Product A',
+        supplier: {
+          name: 'Supplier X',
+          code: 'SUP001',
+          _display: 'Supplier X'
+        }
+      })
+
+      // Change the _display field
+      product.supplier = {
+        name: 'Supplier X',
+        code: 'SUP001',
+        _display: 'Supplier X Updated'
+      }
+
+      await product.save()
+
+      expect((product as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'updated',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'supplier',
+                before: 'Supplier X',
+                after: 'Supplier X Updated'
+              })
+            ])
+          })
+        ])
+      )
+    })
+
+    it('should handle ObjectId reference with nested _display reference', async () => {
+      const BrandSchema = new Schema({
+        name: String,
+        _display: String
+      })
+
+      const ProductSchema = new Schema({
+        name: String,
+        _display: { type: Schema.Types.ObjectId, ref: 'BrandRef' }
+      })
+
+      const InstanceSchema = new Schema({
+        sku: String,
+        productId: { type: Schema.Types.ObjectId, ref: 'ProductRef' }
+      })
+
+      InstanceSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ['productId']
+      })
+
+      const Brand = mongoose.model('BrandRef', BrandSchema)
+      const Product = mongoose.model('ProductRef', ProductSchema)
+      const Instance = mongoose.model(faker.internet.password(), InstanceSchema)
+
+      const brand = await Brand.create({
+        name: 'Brand A',
+        _display: 'Brand A Display'
+      })
+
+      const product = await Product.create({
+        name: 'Product 1',
+        _display: brand._id
+      })
+
+      const instance = await Instance.create({
+        sku: 'SKU001',
+        productId: product._id
+      })
+
+      const product2 = await Product.create({
+        name: 'Product 2',
+        _display: brand._id
+      })
+
+      instance.productId = product2._id
+      await instance.save()
+
+      expect((instance as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'updated',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'productId'
+              })
+            ])
+          })
+        ])
+      )
+    })
+
+    it('should handle primitive values being added to array', async () => {
+      const schema = new Schema({
+        name: String,
+        numbers: [Number]
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['numbers']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'test',
+        numbers: []
+      })
+
+      doc.numbers = [1, 2, 3, 4, 5]
+
+      await doc.save()
+
+      expect((doc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'added',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'numbers',
+                before: null,
+                after: 1
+              }),
+              expect.objectContaining({
+                field: 'numbers',
+                before: null,
+                after: 2
+              }),
+              expect.objectContaining({
+                field: 'numbers',
+                before: null,
+                after: 3
+              }),
+              expect.objectContaining({
+                field: 'numbers',
+                before: null,
+                after: 4
+              }),
+              expect.objectContaining({
+                field: 'numbers',
+                before: null,
+                after: 5
+              })
+            ])
+          })
+        ])
+      )
+    })
+
+    it('should handle updateOne with null updatedFields', async () => {
+      const schema = new Schema({
+        name: String,
+        value: Number
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['name']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'test',
+        value: 100
+      })
+
+      // This should not throw error even with empty update
+      await Model.updateOne({ _id: doc._id }, {})
+
+      const result = await Model.findById(doc._id)
+
+      expect((result as any).history).toEqual([])
+    })
+
+    it('should handle removed action when value has not changed but action is removed', async () => {
+      const schema = new Schema({
+        name: String,
+        metadata: {
+          value: String,
+          count: Number
+        }
+      })
+
+      schema.plugin(mongooseTracker, {
+        fieldsToTrack: ['metadata']
+      })
+
+      const Model = mongoose.model(faker.internet.password(), schema)
+
+      const doc = await Model.create({
+        name: 'test',
+        metadata: {
+          value: 'test',
+          count: 5
+        }
+      })
+
+      // Simulate removal by setting to empty/different
+      doc.metadata = {
+        value: 'test',
+        count: 0
+      }
+
+      await doc.save()
+
+      expect((doc as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'updated'
+          })
+        ])
+      )
+    })
   })
 })
