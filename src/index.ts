@@ -81,14 +81,35 @@ const isValidPattern = (pattern: string): boolean => {
 }
 
 const findArrayDifferences = (oldArray: any[], newArray: any[]): { added: any[], removed: any[] } => {
+  // Normalize arrays by converting all items to plain objects
+  const normalizeItem = (item: any): any => {
+    if (typeof item?.toObject === 'function') {
+      return item.toObject()
+    }
+    return item
+  }
+
+  const normalizedOldArray = oldArray.map(normalizeItem)
+  const normalizedNewArray = newArray.map(normalizeItem)
+
+  // Custom comparison function that handles _id fields
+  const itemsEqual = (item1: any, item2: any): boolean => {
+    // If both have _id, compare by _id (faster and more reliable)
+    if (item1?._id != null && item2?._id != null) {
+      return item1._id.toString() === item2._id.toString()
+    }
+    // Otherwise use deep equality
+    return isEqual(item1, item2)
+  }
+
   // Find added elements
-  const added = newArray.map((item: any) => (typeof item.toObject === 'function' ? item?.toObject() : item)).filter(
-    (newItem) => !oldArray.map((item: any) => (typeof item.toObject === 'function' ? item?.toObject() : item)).some((oldItem) => isEqual(oldItem, newItem))
+  const added = normalizedNewArray.filter(
+    (newItem) => !normalizedOldArray.some((oldItem) => itemsEqual(oldItem, newItem))
   )
 
   // Find removed elements
-  const removed = oldArray.map((item: any) => (typeof item.toObject === 'function' ? item?.toObject() : item)).filter(
-    (oldItem) => !newArray.map((item: any) => (typeof item.toObject === 'function' ? item?.toObject() : item)).some((newItem) => isEqual(oldItem, newItem))
+  const removed = normalizedOldArray.filter(
+    (oldItem) => !normalizedNewArray.some((newItem) => itemsEqual(oldItem, newItem))
   )
 
   return { added, removed }
@@ -152,7 +173,6 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
 
   // Use custom logger if provided, otherwise create default logger
   const logger = customLogger ?? createDefaultLogger(logLevel)
-
   logger.info('Initializing mongoose-tracker plugin with options:', {
     name,
     fieldsToTrackCount: fieldsToTrack.length,
@@ -233,13 +253,13 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
             if (isObject(element) && !isArray(element)) {
               const valueDisplay = await returnDisplayFromDocumentForValue(doc, `${path}.${index}._display`, (element as any)._display, instanceMongoose, logger)
               history.changes.push({
-                field: path,
+                field: displayField,
                 before: null,
                 after: valueDisplay
               })
             } else {
               history.changes.push({
-                field: path,
+                field: displayField,
                 before: null,
                 after: element
               })
@@ -292,10 +312,9 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
     }
 
     const changedBy = (this._changedBy as string) ?? null
-    const changedFields = this.directModifiedPaths()
+    const changedFields = this.modifiedPaths()
 
     logger.info(`Pre-save hook triggered for document ${this.id}, changed fields:`, changedFields)
-
     const history: History = {
       action: 'updated',
       at: Date.now(),
@@ -437,7 +456,7 @@ const mongooseTracker = function (schema: Schema, options: Options): void {
     await this.model.updateOne(
       query,
       { [name]: takeRight([...oldHistory, history], limit) },
-      { skipMiddleware: true }
+      { skipMiddleware: true } as any
     )
 
     logger.info(`History updated for document ${docUpdated._id} with ${history.changes.length} changes`)

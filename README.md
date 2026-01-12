@@ -413,6 +413,115 @@ When specifying an array field in fieldsToTrack, such as "orders", **mongooseTra
 - **Additions**: When a new element is added to the array, the plugin logs this change in the history array.
 - **Deletions**: When an existing element is removed from the array, the plugin logs this removal in the history array.
 
+### Array Elements with Referenced `_display`
+
+**mongooseTracker** also supports tracking arrays where the `_display` field is an `ObjectId` reference to another model. The plugin will automatically resolve the reference and use the referenced document's `_display` value in the history log.
+
+#### Example: Tracking Suppliers Array
+
+```ts
+const BusinessPartnerSchema = new Schema({
+  name: { type: String, required: true },
+  type: { type: String },
+  _display: { type: String, required: true }
+});
+
+const ExpanderProductSchema = new Schema({
+  name: { type: String, required: true },
+  availableSuppliers: [
+    {
+      name: { type: String, required: true },
+      supplierId: {
+        type: Schema.Types.ObjectId,
+        ref: 'BusinessPartner',
+        required: true
+      },
+      cost: { type: Number, default: 0 },
+      // _display references the BusinessPartner document
+      _display: {
+        type: Schema.Types.ObjectId,
+        ref: 'BusinessPartner'
+      }
+    }
+  ]
+});
+
+// Track changes to availableSuppliers array
+ExpanderProductSchema.plugin(mongooseTracker, {
+  fieldsToTrack: ['availableSuppliers']
+});
+
+const BusinessPartner = mongoose.model('BusinessPartner', BusinessPartnerSchema);
+const ExpanderProduct = mongoose.model('ExpanderProduct', ExpanderProductSchema);
+```
+
+#### Adding a Supplier:
+
+```js
+const supplier = await BusinessPartner.create({
+  name: 'Supplier A',
+  type: 'manufacturer',
+  _display: 'Supplier A Display'
+});
+
+const product = await ExpanderProduct.findOne({ name: 'My Product' });
+
+product.availableSuppliers.push({
+  name: supplier.name,
+  supplierId: supplier._id,
+  cost: 100,
+  _display: supplier._id  // ObjectId reference
+});
+
+await product.save();
+```
+
+#### History Log Entry:
+
+```js
+{
+  "action": "added",
+  "at": 1734955271622,
+  "changedBy": null,
+  "changes": [
+    {
+      "field": "availableSuppliers",
+      "before": null,
+      "after": "Supplier A Display"  // Resolved from BusinessPartner._display
+    }
+  ]
+}
+```
+
+#### Removing a Supplier:
+
+```js
+product.availableSuppliers = product.availableSuppliers.filter(
+  s => s.supplierId.toString() !== supplier._id.toString()
+);
+
+await product.save();
+```
+
+#### History Log Entry:
+
+```js
+{
+  "action": "removed",
+  "at": 1734955271622,
+  "changedBy": null,
+  "changes": [
+    {
+      "field": "availableSuppliers",
+      "before": "Supplier A Display",  // Resolved from BusinessPartner._display
+      "after": null
+    }
+  ]
+}
+```
+
+---
+
 #### Operations:
 Adding an element (Order):
 

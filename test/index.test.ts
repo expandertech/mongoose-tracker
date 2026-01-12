@@ -529,7 +529,7 @@ describe('mongooseTracker tests', () => {
             child: String
           },
           items: [itemSchema]
-        })
+        } as any)
         // Apply the tracker plugin
         parentSchema.plugin(mongooseTracker, {
           fieldsToTrack: ['nested.child', 'items.$.name', 'items.$.nested', 'items.$.nested.name'], // Track nested and array fields
@@ -1127,13 +1127,13 @@ describe('mongooseTracker tests', () => {
         await Model.updateOne(
           { name: 'initial' },
           { name: 'updatedName' },
-          { changedBy: 'user2' }
+          { changedBy: 'user2' } as any
         )
 
         await Model.updateOne(
           { toto: 'tracked' },
           { toto: 'tracked2' },
-          { changedBy: 'user2' }
+          { changedBy: 'user2' } as any
         )
 
         const doc = await Model.findOne({ price: 10 })
@@ -1372,7 +1372,7 @@ describe('mongooseTracker tests', () => {
       await Model.findOneAndUpdate(
         { _id: doc._id },
         { name: 'updatedName' },
-        { changedBy: 'batchJob' }
+        { changedBy: 'batchJob' } as any
       )
 
       const updatedDoc = await Model.findOne({ _id: doc._id })
@@ -1461,7 +1461,7 @@ describe('mongooseTracker tests', () => {
       await Model.updateMany(
         { name: 'initial' },
         { name: 'bulkUpdate' },
-        { changedBy: 'admin' }
+        { changedBy: 'admin' } as any
       )
 
       const docs = await Model.find({})
@@ -1531,7 +1531,7 @@ describe('mongooseTracker tests', () => {
           child: String
         },
         items: [itemSchema]
-      })
+      } as any)
 
       // Apply the tracker plugin
       parentSchema.plugin(mongooseTracker, {
@@ -1600,7 +1600,7 @@ describe('mongooseTracker tests', () => {
           child2: String
         },
         items: [itemSchema]
-      })
+      } as any)
 
       parentSchema.plugin(mongooseTracker, {
         name: 'history' // Store tracked changes in the "history" array
@@ -1858,7 +1858,6 @@ describe('mongooseTracker tests', () => {
       await Model.updateOne(
         { _id: doc._id },
         { name: 'updated' },
-        { skipMiddleware: true }
       )
 
       const updatedDoc = await Model.findById(doc._id)
@@ -1949,7 +1948,7 @@ describe('mongooseTracker tests', () => {
       await Model.findOneAndUpdate(
         { _id: doc._id },
         { name: 'updated' },
-        { changedBy: 'admin' }
+        { changedBy: 'admin' } as any
       )
 
       const updatedDoc = await Model.findById(doc._id)
@@ -2196,8 +2195,8 @@ describe('mongooseTracker tests', () => {
       }
 
       pd.set('products',
-        pd.products.filter(
-          (pd) => pd.instanceId.toString() !== instance3._id.toString()
+        (pd.products as any).filter(
+          (pd: any) => pd.instanceId.toString() !== instance3._id.toString()
         )
       );
 
@@ -2353,8 +2352,8 @@ describe('mongooseTracker tests', () => {
 
       pd.set(
         'products',
-        pd.products.filter(
-          (pd) => pd.instanceId.toString() !== instance3._id.toString()
+        (pd.products as any).filter(
+          (pd: any) => pd.instanceId.toString() !== instance3._id.toString()
         )
       );
 
@@ -2610,9 +2609,9 @@ describe('mongooseTracker tests', () => {
 
       // Replace entire array
       doc.items = [
-        { name: 'new1', _display: 'New 1' },
-        { name: 'new2', _display: 'New 2' }
-      ]
+        { name: 'new1', _display: 'New 1' } as any,
+        { name: 'new2', _display: 'New 2' } as any
+      ] as any
 
       await doc.save()
 
@@ -2788,7 +2787,7 @@ describe('mongooseTracker tests', () => {
       )
 
       // Now remove the order
-      doc.orders = []
+      doc.orders = [] as any
       await doc.save()
 
       expect((doc as any).history).toEqual(
@@ -2890,7 +2889,7 @@ describe('mongooseTracker tests', () => {
       await Item.findOneAndUpdate(
         { _id: item._id },
         { supplierId: supplier2._id },
-        { changedBy: 'admin' }
+        { changedBy: 'admin' } as any
       )
 
       const updatedItem = await Item.findById(item._id)
@@ -3140,6 +3139,421 @@ describe('mongooseTracker tests', () => {
         expect.arrayContaining([
           expect.objectContaining({
             action: 'updated'
+          })
+        ])
+      )
+    })
+  })
+
+  describe('ExpanderProduct availableSuppliers tracking', () => {
+    it('should track when a supplier is added to availableSuppliers array and resolve _display from BusinessPartner', async () => {
+      const BusinessPartnerSchema = new Schema({
+        name: { type: String, required: true },
+        type: { type: String },
+        _display: { type: String, required: true }
+      })
+
+      const ExpanderProductSchema = new Schema({
+        name: { type: String, required: true },
+        availableSuppliers: [
+          {
+            name: { type: String, required: true },
+            supplierId: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner,
+              required: true
+            },
+            dimensions: {
+              boxUnitLengthSide: { type: Number, default: 0 },
+              boxUnitWidthSide: { type: Number, default: 0 },
+              boxUnitHeightSide: { type: Number, default: 0 }
+            },
+            minimumOrderQuantity: { type: Number, default: 0 },
+            cost: { type: Number, default: 0 },
+            _display: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner
+            }
+          }
+        ],
+        _display: { type: String }
+      })
+
+      ExpanderProductSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ['availableSuppliers']
+      })
+
+      const BusinessPartnerModel = mongoose.model(
+        Collections.BusinessPartner,
+        BusinessPartnerSchema
+      )
+
+      const ExpanderProductModel = mongoose.model(
+        faker.internet.password(),
+        ExpanderProductSchema
+      )
+
+      // Create suppliers
+      const supplier1 = await BusinessPartnerModel.create({
+        name: 'Supplier A',
+        type: 'manufacturer',
+        _display: 'Supplier A Display'
+      })
+
+      const supplier2 = await BusinessPartnerModel.create({
+        name: 'Supplier B',
+        type: 'manufacturer',
+        _display: 'Supplier B Display'
+      })
+
+      // Create product with one supplier
+      const product = await ExpanderProductModel.create({
+        name: 'Test Product',
+        availableSuppliers: [
+          {
+            name: supplier1.name,
+            supplierId: supplier1._id,
+            dimensions: {
+              boxUnitLengthSide: 10,
+              boxUnitWidthSide: 20,
+              boxUnitHeightSide: 30
+            },
+            minimumOrderQuantity: 100,
+            cost: 50,
+            _display: supplier1._id
+          }
+        ],
+        _display: 'Test Product'
+      })
+
+      // Add another supplier
+      product.availableSuppliers.push({
+        name: supplier2.name,
+        supplierId: supplier2._id,
+        dimensions: {
+          boxUnitLengthSide: 15,
+          boxUnitWidthSide: 25,
+          boxUnitHeightSide: 35
+        },
+        minimumOrderQuantity: 200,
+        cost: 75,
+        _display: supplier2._id
+      } as any)
+
+      await product.save()
+
+      expect(product).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'added',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'availableSuppliers',
+                  before: null,
+                  after: 'Supplier B Display'
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
+
+    it('should track when a supplier is removed from availableSuppliers array and resolve _display from BusinessPartner', async () => {
+      const BusinessPartnerSchema = new Schema({
+        name: { type: String, required: true },
+        type: { type: String },
+        _display: { type: String, required: true }
+      })
+
+      const ExpanderProductSchema = new Schema({
+        name: { type: String, required: true },
+        availableSuppliers: [
+          {
+            name: { type: String, required: true },
+            supplierId: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner,
+              required: true
+            },
+            dimensions: {
+              boxUnitLengthSide: { type: Number, default: 0 },
+              boxUnitWidthSide: { type: Number, default: 0 },
+              boxUnitHeightSide: { type: Number, default: 0 }
+            },
+            minimumOrderQuantity: { type: Number, default: 0 },
+            cost: { type: Number, default: 0 },
+            _display: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner
+            }
+          }
+        ],
+        _display: { type: String }
+      })
+
+      ExpanderProductSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ['availableSuppliers']
+      })
+
+      const BusinessPartnerModel = mongoose.model(
+        Collections.BusinessPartner,
+        BusinessPartnerSchema
+      )
+
+      const ExpanderProductModel = mongoose.model(
+        faker.internet.password(),
+        ExpanderProductSchema
+      )
+
+      // Create suppliers
+      const supplier1 = await BusinessPartnerModel.create({
+        name: 'Supplier A',
+        type: 'manufacturer',
+        _display: 'Supplier A Display'
+      })
+
+      const supplier2 = await BusinessPartnerModel.create({
+        name: 'Supplier B',
+        type: 'manufacturer',
+        _display: 'Supplier B Display'
+      })
+
+      // Create product with two suppliers
+      const product = await ExpanderProductModel.create({
+        name: 'Test Product',
+        availableSuppliers: [
+          {
+            name: supplier1.name,
+            supplierId: supplier1._id,
+            dimensions: {
+              boxUnitLengthSide: 10,
+              boxUnitWidthSide: 20,
+              boxUnitHeightSide: 30
+            },
+            minimumOrderQuantity: 100,
+            cost: 50,
+            _display: supplier1._id
+          },
+          {
+            name: supplier2.name,
+            supplierId: supplier2._id,
+            dimensions: {
+              boxUnitLengthSide: 15,
+              boxUnitWidthSide: 25,
+              boxUnitHeightSide: 35
+            },
+            minimumOrderQuantity: 200,
+            cost: 75,
+            _display: supplier2._id
+          }
+        ],
+        _display: 'Test Product'
+      })
+
+      // Remove supplier2
+      product.availableSuppliers = product.availableSuppliers.filter(
+        (supplier: any) => supplier.supplierId.toString() !== supplier2._id.toString()
+      ) as any
+
+      await product.save()
+
+      expect(product).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'removed',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'availableSuppliers',
+                  before: 'Supplier B Display',
+                  after: null
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
+
+    it('should track multiple suppliers being added and removed in different saves', async () => {
+      const BusinessPartnerSchema = new Schema({
+        name: { type: String, required: true },
+        type: { type: String },
+        _display: { type: String, required: true }
+      })
+
+      const ExpanderProductSchema = new Schema({
+        name: { type: String, required: true },
+        availableSuppliers: [
+          {
+            name: { type: String, required: true },
+            supplierId: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner,
+              required: true
+            },
+            dimensions: {
+              boxUnitLengthSide: { type: Number, default: 0 },
+              boxUnitWidthSide: { type: Number, default: 0 },
+              boxUnitHeightSide: { type: Number, default: 0 }
+            },
+            minimumOrderQuantity: { type: Number, default: 0 },
+            cost: { type: Number, default: 0 },
+            _display: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner
+            }
+          }
+        ],
+        _display: { type: String }
+      })
+
+      ExpanderProductSchema.plugin(mongooseTracker, {
+        fieldsToTrack: ['availableSuppliers']
+      })
+
+      const BusinessPartnerModel = mongoose.model(
+        Collections.BusinessPartner,
+        BusinessPartnerSchema
+      )
+
+      const ExpanderProductModel = mongoose.model(
+        faker.internet.password(),
+        ExpanderProductSchema
+      )
+
+      // Create suppliers
+      const supplier1 = await BusinessPartnerModel.create({
+        name: 'Supplier A',
+        type: 'manufacturer',
+        _display: 'Supplier A Display'
+      })
+
+      const supplier2 = await BusinessPartnerModel.create({
+        name: 'Supplier B',
+        type: 'manufacturer',
+        _display: 'Supplier B Display'
+      })
+
+      const supplier3 = await BusinessPartnerModel.create({
+        name: 'Supplier C',
+        type: 'manufacturer',
+        _display: 'Supplier C Display'
+      })
+
+      // Create product with no suppliers
+      const product = await ExpanderProductModel.create({
+        name: 'Test Product',
+        availableSuppliers: [],
+        _display: 'Test Product'
+      })
+
+      // Add two suppliers
+      product.availableSuppliers.push(
+        {
+          name: supplier1.name,
+          supplierId: supplier1._id,
+          dimensions: {
+            boxUnitLengthSide: 10,
+            boxUnitWidthSide: 20,
+            boxUnitHeightSide: 30
+          },
+          minimumOrderQuantity: 100,
+          cost: 50,
+          _display: supplier1._id
+        } as any,
+        {
+          name: supplier2.name,
+          supplierId: supplier2._id,
+          dimensions: {
+            boxUnitLengthSide: 15,
+            boxUnitWidthSide: 25,
+            boxUnitHeightSide: 35
+          },
+          minimumOrderQuantity: 200,
+          cost: 75,
+          _display: supplier2._id
+        } as any
+      )
+
+      await product.save()
+
+      // Verify both were added
+      expect(product).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'added',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'availableSuppliers',
+                  before: null,
+                  after: 'Supplier A Display'
+                }),
+                expect.objectContaining({
+                  field: 'availableSuppliers',
+                  before: null,
+                  after: 'Supplier B Display'
+                })
+              ])
+            })
+          ])
+        })
+      )
+
+      // Add one more supplier
+      product.availableSuppliers.push({
+        name: supplier3.name,
+        supplierId: supplier3._id,
+        dimensions: {
+          boxUnitLengthSide: 20,
+          boxUnitWidthSide: 30,
+          boxUnitHeightSide: 40
+        },
+        minimumOrderQuantity: 300,
+        cost: 100,
+        _display: supplier3._id
+      } as any)
+
+      await product.save()
+
+      // Verify the third was added
+      expect((product as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'added',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'availableSuppliers',
+                before: null,
+                after: 'Supplier C Display'
+              })
+            ])
+          })
+        ])
+      )
+
+      // Remove supplier1
+      product.availableSuppliers = product.availableSuppliers.filter(
+        (supplier: any) => supplier.supplierId.toString() !== supplier1._id.toString()
+      ) as any
+
+      await product.save()
+
+      // Verify supplier1 was removed
+      expect((product as any).history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'removed',
+            changes: expect.arrayContaining([
+              expect.objectContaining({
+                field: 'availableSuppliers',
+                before: 'Supplier A Display',
+                after: null
+              })
+            ])
           })
         ])
       )

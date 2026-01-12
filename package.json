@@ -1,6 +1,6 @@
 {
   "name": "@expander/mongoose-tracker",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Is a mongoose plugin that automatically keeps track of when the document has been created, updated and optionally when some fields have been modified",
   "main": "./build/index.js",
   "types": "./build/index.d.ts",
@@ -67,7 +67,7 @@
     "husky": "^7.0.4",
     "jest": "^27.4.7",
     "mongodb-memory-server": "^8.1.0",
-    "mongoose": "^6.1.5",
+    "mongoose": "^8.0.2",
     "rimraf": "^3.0.2",
     "rollup": "^2.63.0",
     "rollup-plugin-dts": "^4.1.0",
