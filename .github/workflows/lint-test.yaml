@@ -7,16 +7,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Uses nodeJs
-        uses: actions/setup-node@v2
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+          cache: 'yarn'
+      
       - name: Install dependencies
-        uses: bahmutov/npm-install@HEAD
+        run: yarn install --frozen-lockfile
+      
       - name: Run linter
         run: yarn lint
+      
       - name: Run Tests
         run: yarn test
         env:
           CI: true
+          MONGOMS_DOWNLOAD_URL: https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu2204-7.0.14.tgz
+          MONGOMS_VERSION: 7.0.14
+          MONGOMS_ARCH: x64
+          MONGOMS_PLATFORM: linux
