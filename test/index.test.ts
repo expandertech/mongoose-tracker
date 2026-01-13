@@ -3558,5 +3558,128 @@ describe('mongooseTracker tests', () => {
         ])
       )
     })
+
+    it('should track nested dimensions fields in availableSuppliers and resolve supplier _display correctly', async () => {
+      const BusinessPartnerSchema = new Schema({
+        name: { type: String, required: true },
+        type: { type: String },
+        _display: { type: String, required: true }
+      })
+
+      const ExpanderProductSchema = new Schema({
+        name: { type: String, required: true },
+        availableSuppliers: [
+          {
+            name: { type: String, required: true },
+            supplierId: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner,
+              required: true
+            },
+            dimensions: {
+              boxUnitLengthSide: { type: Number, default: 0 },
+              boxUnitWidthSide: { type: Number, default: 0 },
+              boxUnitHeightSide: { type: Number, default: 0 },
+              boxUnitWeight: { type: Number, default: 0 }
+            },
+            minimumOrderQuantity: { type: Number, default: 0 },
+            cost: { type: Number, default: 0 },
+            _display: {
+              type: Schema.Types.ObjectId,
+              ref: Collections.BusinessPartner
+            }
+          }
+        ],
+        _display: { type: String }
+      })
+
+      ExpanderProductSchema.plugin(mongooseTracker, {
+        fieldsToTrack: [
+          'availableSuppliers.$.dimensions.boxUnitLengthSide',
+          'availableSuppliers.$.dimensions.boxUnitWidthSide',
+          'availableSuppliers.$.dimensions.boxUnitHeightSide',
+          'availableSuppliers.$.dimensions.boxUnitWeight'
+        ]
+      })
+
+      const BusinessPartnerModel = mongoose.model(
+        Collections.BusinessPartner,
+        BusinessPartnerSchema
+      )
+
+      const ExpanderProductModel = mongoose.model(
+        faker.internet.password(),
+        ExpanderProductSchema
+      )
+
+      // Create supplier
+      const supplier = await BusinessPartnerModel.create({
+        name: 'Xinlong Plastic Trunking Co Ltd',
+        type: 'manufacturer',
+        _display: 'Xinlong Plastic Trunking Co Ltd'
+      })
+
+      // Create product with supplier
+      const product = await ExpanderProductModel.create({
+        name: 'Test Product',
+        availableSuppliers: [
+          {
+            name: supplier.name,
+            supplierId: supplier._id,
+            dimensions: {
+              boxUnitLengthSide: 10,
+              boxUnitWidthSide: 20,
+              boxUnitHeightSide: 30,
+              boxUnitWeight: 5
+            },
+            minimumOrderQuantity: 100,
+            cost: 50,
+            _display: supplier._id
+          }
+        ],
+        _display: 'Test Product'
+      })
+
+      // Update dimensions
+      product.availableSuppliers[0].dimensions!.boxUnitLengthSide = 15
+      product.availableSuppliers[0].dimensions!.boxUnitWidthSide = 25
+      product.availableSuppliers[0].dimensions!.boxUnitHeightSide = 35
+      product.availableSuppliers[0].dimensions!.boxUnitWeight = 7
+
+      await product.save()
+
+      // Verify the field names include the supplier display name, not the ObjectId
+      expect(product).toEqual(
+        expect.objectContaining({
+          history: expect.arrayContaining([
+            expect.objectContaining({
+              action: 'updated',
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'Xinlong Plastic Trunking Co Ltd boxUnitLengthSide',
+                  before: 10,
+                  after: 15
+                }),
+                expect.objectContaining({
+                  field: 'Xinlong Plastic Trunking Co Ltd boxUnitWidthSide',
+                  before: 20,
+                  after: 25
+                }),
+                expect.objectContaining({
+                  field: 'Xinlong Plastic Trunking Co Ltd boxUnitHeightSide',
+                  before: 30,
+                  after: 35
+                }),
+                expect.objectContaining({
+                  field: 'Xinlong Plastic Trunking Co Ltd boxUnitWeight',
+                  before: 5,
+                  after: 7
+                })
+              ])
+            })
+          ])
+        })
+      )
+    })
   })
 })

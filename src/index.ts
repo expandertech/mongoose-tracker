@@ -118,11 +118,31 @@ const findArrayDifferences = (oldArray: any[], newArray: any[]): { added: any[],
 const getDisplayName = async (doc: any, field: string, mongoose: any, logger: Logger): Promise<string> => {
   const parts = field.split('.')
   const isArrayPath = parts.some((part) => /^\d+$/.test(part))
+
   if (isArrayPath) {
-    const path = `${parts.slice(0, parts.length - 1).join('.')}._display`
-    const docValue = get(doc, path)
-    const displayField = await returnDisplayFromDocumentForField(doc, field, path, docValue, mongoose, logger)
-    return displayField === field ? field : `${displayField} ${parts[parts.length - 1]}`
+    // Find all array index positions
+    const arrayIndices: number[] = []
+    parts.forEach((part, index) => {
+      if (/^\d+$/.test(part)) {
+        arrayIndices.push(index)
+      }
+    })
+
+    // Try to find _display starting from the innermost array (last index) to outermost
+    for (let i = arrayIndices.length - 1; i >= 0; i--) {
+      const arrayIndexPosition = arrayIndices[i]
+      const path = `${parts.slice(0, arrayIndexPosition + 1).join('.')}._display`
+      const docValue = get(doc, path)
+
+      // If _display exists at this level, use it
+      if (docValue !== undefined && docValue !== null) {
+        const displayField = await returnDisplayFromDocumentForField(doc, field, path, docValue, mongoose, logger)
+        return displayField === field ? field : `${displayField} ${parts[parts.length - 1]}`
+      }
+    }
+
+    // If no _display found, return the original field
+    return field
   }
   return field
 }

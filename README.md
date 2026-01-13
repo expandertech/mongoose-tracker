@@ -312,6 +312,109 @@ await purchaseDemand.save();
   ]
 }
 ```
+
+### Tracking Nested Objects within Array Elements
+
+When tracking nested objects inside array elements, the plugin intelligently resolves the `_display` from the array element itself, not from the nested object. This is particularly useful for complex schemas with nested structures.
+
+#### Example: Tracking Supplier Dimensions
+
+```typescript
+const BusinessPartnerSchema = new Schema({
+  name: { type: String, required: true },
+  _display: { type: String, required: true }
+});
+
+const ExpanderProductSchema = new Schema({
+  name: { type: String, required: true },
+  availableSuppliers: [
+    {
+      name: { type: String, required: true },
+      supplierId: {
+        type: Schema.Types.ObjectId,
+        ref: 'BusinessPartner',
+        required: true
+      },
+      dimensions: {
+        boxUnitLengthSide: { type: Number, default: 0 },
+        boxUnitWidthSide: { type: Number, default: 0 },
+        boxUnitHeightSide: { type: Number, default: 0 },
+        boxUnitWeight: { type: Number, default: 0 }
+      },
+      cost: { type: Number, default: 0 },
+      _display: {
+        type: Schema.Types.ObjectId,
+        ref: 'BusinessPartner'  // References BusinessPartner
+      }
+    }
+  ]
+});
+
+// Track nested dimension fields
+ExpanderProductSchema.plugin(mongooseTracker, {
+  fieldsToTrack: [
+    'availableSuppliers.$.dimensions.boxUnitLengthSide',
+    'availableSuppliers.$.dimensions.boxUnitWidthSide',
+    'availableSuppliers.$.dimensions.boxUnitHeightSide',
+    'availableSuppliers.$.dimensions.boxUnitWeight'
+  ]
+});
+```
+
+#### Usage:
+
+```javascript
+const supplier = await BusinessPartner.create({
+  name: 'Xinlong Plastic Trunking Co Ltd',
+  _display: 'Xinlong Plastic Trunking Co Ltd'
+});
+
+const product = await ExpanderProduct.create({
+  name: 'Test Product',
+  availableSuppliers: [{
+    name: supplier.name,
+    supplierId: supplier._id,
+    dimensions: {
+      boxUnitLengthSide: 10,
+      boxUnitWidthSide: 20,
+      boxUnitHeightSide: 30,
+      boxUnitWeight: 5
+    },
+    cost: 50,
+    _display: supplier._id  // ObjectId reference
+  }]
+});
+
+// Update dimensions
+product.availableSuppliers[0].dimensions.boxUnitLengthSide = 15;
+product.availableSuppliers[0].dimensions.boxUnitWeight = 7;
+await product.save();
+```
+
+#### History Log Entry:
+
+```javascript
+{
+  "action": "updated",
+  "at": 1734955271622,
+  "changedBy": null,
+  "changes": [
+    {
+      "field": "Xinlong Plastic Trunking Co Ltd boxUnitLengthSide",  // Resolved from BusinessPartner
+      "before": 10,
+      "after": 15
+    },
+    {
+      "field": "Xinlong Plastic Trunking Co Ltd boxUnitWeight",  // Resolved from BusinessPartner
+      "before": 5,
+      "after": 7
+    }
+  ]
+}
+```
+
+**Note:** The plugin resolves the `_display` from `availableSuppliers[0]._display` (which references the BusinessPartner), not from `availableSuppliers[0].dimensions._display`. This provides meaningful context showing which supplier's dimensions were modified.
+
 ---
 
 ## Logging
